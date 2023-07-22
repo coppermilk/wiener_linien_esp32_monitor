@@ -16,10 +16,10 @@ const char* password = "tFax8Er3yycw";  // type your WiFi password
 
 #define SQUARE_SIZE 15
 
-// chose you url from https://till.mabe.at/rbl/?line=102&station=4909
+// chose you RBL from https://till.mabe.at/rbl/?line=102&station=4909
 #define URL "https://www.wienerlinien.at/ogd_realtime/monitor?activateTrafficInfo=stoerunglang&rbl=1366"
 
-std::pair<String, String> splitString(String inputString);
+const std::pair<String, String> splitString(String inputString);
 String getJson();
 
 TFT_eSPI tft = TFT_eSPI();
@@ -39,49 +39,68 @@ void setup() {
   screenInit();
 }
 
+
 void loop() {
   std::vector<int> countdownVector;
-  String name;     // name tram lik 2, 72, D etc.
-  String towards;  // tram directions.
+  String name;         // Line name 2, 72, D etc.
+  String towards;      // Tram directions.
+  String description;  // Line alarm
 
-  if (WiFi.status() == WL_CONNECTED) {
-    // Parse JSON response
-    {
-      String response = getJson();
-      DynamicJsonDocument jsonDocument(2048*2);
-      DeserializationError error = deserializeJson(jsonDocument, response, DeserializationOption::NestingLimit(30));
-      if (error) {
-        Serial.println("Failed to parse JSON response.");
-        Serial.println(error.c_str());
-        screenInit();  // draw empty screen
-        delay(DELAY_MS);
-        return;
-      }
-
-      // Extract countdown values
-      JsonObject line = jsonDocument["data"]["monitors"][0]["lines"][0];
- 
-      JsonArray countdownArray = line["departures"]["departure"];
-      name = line["name"].as<String>();
-      towards = line["towards"].as<String>();
-      // currently not used
-      String trafficInfos = jsonDocument["data"]["trafficInfos"][0]["description"].as<String>();
-
-      for (const auto& departure : countdownArray) {
-        int countdown = departure["departureTime"]["countdown"].as<int>();
-        countdownVector.push_back(countdown);
-      }
+  // Parse JSON response
+  {
+    String response = getJson();
+    DynamicJsonDocument root(2048 * 4);
+    DeserializationError error = deserializeJson(root, response, DeserializationOption::NestingLimit(32));
+    if (error) {
+      Serial.println("Failed to parse JSON response.");
+      Serial.println(error.c_str());
+      screenInit();  // draw empty screen
+      delay(DELAY_MS);
+      return;
     }
-    // Print countdowns.
-    {
-      Serial.print("Countdown values: ");
-      for (auto& countdown : countdownVector) {
-        Serial.print(countdown);
-        Serial.print(" ");
-      }
-      Serial.println();
+
+    /*
+      root
+      |- data
+      |  |- trafficInfos
+      |  |  |- trafficInfo[]
+      |  |  |  |- description[0]
+      |  |- monitors[]
+      |  |  |- monitor[0]
+      |  |  |  |- lines[]
+      |  |  |  |  |- line[0]
+      |  |  |  |  |  |- name
+      |  |  |  |  |  |- towards
+      |  |  |  |  |  |- departures
+      |  |  |  |  |  |  |- departure
+    */
+    JsonObject data = root["data"];
+    JsonArray trafficInfos = data["trafficInfos"];
+    JsonObject trafficInfo = trafficInfos[0];
+    description = trafficInfo["description"].as<String>();
+    JsonArray monitors = data["monitors"];
+    JsonObject moniror = monitors[0];
+    JsonArray lines = moniror["lines"];
+    JsonObject line = lines[0];
+    name = line["name"].as<String>();
+    towards = line["towards"].as<String>();
+    JsonObject departures = line["departures"];
+    JsonArray departure = departures["departure"];
+
+    for (const auto& i : departure) {
+      JsonObject departureTime = i["departureTime"];
+      int countdown = departureTime["countdown"].as<int>();
+      countdownVector.push_back(countdown);
     }
   }
+
+  // Print countdowns.
+  Serial.print("Countdown values: ");
+  for (auto& countdown : countdownVector) {
+    Serial.print(countdown);
+    Serial.print(" ");
+  }
+  Serial.println();
 
   unsigned int row_count = 2;
 
@@ -116,10 +135,9 @@ void loop() {
       tft.print(countdown);
     }
   }
-
   int c_down_1 = 0;
   int c_down_2 = 0;
-  
+
   if (countdownVector.size() >= 1) {
     c_down_1 = countdownVector[0];
   }
@@ -169,35 +187,39 @@ void drawZero(int x, int y, bool b) {
 }
 
 String getJson() {
+  if (WiFi.status() != WL_CONNECTED) { return ""; }
+
   HTTPClient http;
   String url = URL;
 
+  // Print the URL to the serial port
   Serial.println(url);
-  Serial.println("Reading data...");
 
+  // Start the HTTP request
   http.begin(url);
+
+  // Get the status code of the response
   int httpCode = http.GET();
 
+  // Print the status code to the serial port
   Serial.print("HTTP status code: ");
   Serial.println(httpCode);
 
-  String payload;
+  // Check if the request was successful
   if (httpCode <= 0) {
+    // The request failed
     Serial.println("Error on HTTP request");
-    payload = http.getString();
-    Serial.println(payload);
+    return "";
   } else if (httpCode == HTTP_CODE_OK) {
-    payload = http.getString();
+    // The request was successful
+    // Get the response payload as a string
+    String payload = http.getString();
+    return payload;
   }
-  http.end();
-
-  Serial.print("Response: ");
-  Serial.println(payload);
-  return payload;
 }
 
 
-std::pair<String, String> splitString(String inputString) {
+const std::pair<String, String> splitString(String inputString) {
   int max_char_in_line = 17;
 
   String firstPart = "";
@@ -215,18 +237,24 @@ std::pair<String, String> splitString(String inputString) {
       secondPart = inputString.substring(dashIndex + 1);
     }
   }
+  else
+  {
+    firstPart = inputString;
+  }
 
   return std::make_pair(firstPart, secondPart);
 }
 
 void screenInit() {
+  // Initialize the display
   tft.init();
-  tft.setRotation(1);  // rotate 1 is equal 90 degree
+  tft.setRotation(1);
   tft.fillScreen(TFT_BG);
 
   // Draw middle line
-  int middle_line_height = 4;
-  int y_coordinate = (TFT_HEIGHT - middle_line_height) / 2;
-  tft.setCursor(0, 0, 4);
-  tft.fillRect(0, y_coordinate, TFT_WIDTH, middle_line_height, TFT_BLACK);
+  const int middle_line_height_px = 4;
+  int y_coordinate_middle = (tft.height() - middle_line_height_px) / 2;
+
+  // Use a single function call to draw the line
+  tft.drawFastHLine(0, y_coordinate_middle, tft.width(), TFT_BLACK);
 }
