@@ -2,7 +2,7 @@
 
 **Brief description:** The ESP32-S3 Public Transport Departure Monitor project is a small device based on the ESP32-S3 platform. It allows you to track public transport departures in real time and receive a countdown to the next departures. The project is based on the use of data from Wiener Linien, a public transport network in Vienna.
 
-![Wien Liner Monitor](img/monitor.jpeg)
+https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa64c-565c-4828-9e0d-c0c5b81a090a
 
 ## Project components:
 - 1x LILYGO T-Display-S3 ESP32-S3 1.9-inch board.
@@ -28,7 +28,7 @@
 - Authentic color design, providing ease of use.
 - Based on the open data of the City of Vienna provided by Wiener Linien.
 
-
+![Wien Liner Monitor](img/monitor.jpeg)
 
 ## Description:
 The ESP32-S3 Public Transport Departure Monitor project is a homemade device designed to effectively track and manage the time of public transport departures. Inspired by the needs of citizens tired of endless waiting at bus stops, the project provides accurate data on the time of the next departures on selected routes.
