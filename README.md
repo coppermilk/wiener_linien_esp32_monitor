@@ -18,7 +18,7 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - Open the Arduino IDE and install the required libraries (TFT_eSPI, ArduinoJson, HttpClient, WiFi).
 - Connect your ESP32 device to your computer.
 - Change the ssid and password variables in the code to match your Wi-Fi credentials.
-- Important: Update the URL variable in the code to select your specific RBL (reference bus stop). You can find your RBL here.
+- Important: Update the URL variable in the code to select your specific RBL (reference bus stop). You can find your RBL [here](https://till.mabe.at/rbl/?line=102&station=4909).
 - Flash the code to your ESP32.
 
 ## Opportunities:
