@@ -10,7 +10,7 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - 1x M2.5 nut 
 - 1x M2.5x18 bolt.
 - Glue.
-- Details printed on a 3D printer.
+- [Details printed on a 3D printer.](https://www.thingiverse.com/thing:6166463)
 - [Sketch for Arduino IDE.](https://github.com/coppermilk/wiener_linien_esp32_monitor/)
 
 ## Installation
