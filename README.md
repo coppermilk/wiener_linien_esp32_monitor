@@ -29,7 +29,6 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - Based on the open data of the City of Vienna provided by Wiener Linien.
 
 ![Wien Liner Monitor](img/minotor colage.png)
-
 ## Description:
 The ESP32-S3 Public Transport Departure Monitor project is a homemade device designed to effectively track and manage the time of public transport departures. Inspired by the needs of citizens tired of endless waiting at bus stops, the project provides accurate data on the time of the next departures on selected routes.
 
