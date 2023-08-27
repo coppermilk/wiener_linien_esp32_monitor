@@ -49,7 +49,7 @@ void loop() {
   // Parse JSON response
   {
     String response = getJson();
-    DynamicJsonDocument root(2048 * 4);
+    DynamicJsonDocument root(2048 * 8);
     DeserializationError error = deserializeJson(root, response, DeserializationOption::NestingLimit(32));
     if (error) {
       Serial.println("Failed to parse JSON response.");
