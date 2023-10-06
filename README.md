@@ -14,6 +14,7 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - [Sketch for Arduino IDE.](https://github.com/coppermilk/wiener_linien_esp32_monitor/)
 
 ## Installation
+- Install T-Display S3 in Arduino. [YouTube tutorial.](https://www.youtube.com/watch?v=gpyeMjM9cOU&ab_channel=VolosProjects)
 - Clone or download this repository.
 - Open the Arduino IDE and install the required libraries (TFT_eSPI, ArduinoJson, HttpClient, WiFi).
 - Connect your ESP32 device to your computer.
