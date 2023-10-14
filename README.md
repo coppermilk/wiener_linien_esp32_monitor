@@ -22,6 +22,35 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - Important: Update the URL variable in the code to select your specific RBL (reference bus stop). You can find your RBL [here](https://till.mabe.at/rbl/?line=102&station=4909).
 - Flash the code to your ESP32.
 
+
+## Resetting
+
+**Factory Reset:**
+- Factory reset (keep reset button pressed for more than 30 seconds) will erase all data on your device, including:
+  - Wi-Fi settings
+  - StopID/RBL
+  - Stops filter
+  - Count lines on screen
+
+**Soft Reset:**
+- Soft reset (keep reset button pressed for 5 to 10 seconds) will only erase your Wi-Fi settings.
+
+In other words:
+
+- **Factory reset**: Erases everything, including Wi-Fi settings, StopID/RBL, stops filter, and count lines on the screen.
+- **Soft reset**: Erases only Wi-Fi settings.
+
+### When to Use Each Reset?
+
+**Use a Factory Reset if:**
+- You are giving away your device.
+- Your device is not working properly, and you have tried other troubleshooting steps.
+
+**Use a Soft Reset if:**
+- You are having trouble connecting to Wi-Fi.
+- You want to restore your Wi-Fi settings to their default values.
+
+
 ## Opportunities:
 - Displaying the countdown to the next public transport departures.
 - Updating information every 30 seconds, ensuring that the data is up to date.
