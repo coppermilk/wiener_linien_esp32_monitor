@@ -22,6 +22,8 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - Important: Update the URL variable in the code to select your specific RBL (reference bus stop). You can find your RBL [here](https://till.mabe.at/rbl/?line=102&station=4909).
 - Flash the code to your ESP32.
 
+## Configuration
+[![Everything Is AWESOME](https://img.youtube.com/vi/vSUY8oJgrUI/0.jpg)](https://www.youtube.com/watch?v=vSUY8oJgrUI "Everything Is AWESOME")
 
 ## Resetting
 ![Reset Button](img/resset_button.png)
