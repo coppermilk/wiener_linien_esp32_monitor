@@ -24,7 +24,7 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 
 
 ## Resetting
-
+![Reset Button](img/resset_button.png)
 **Factory Reset:**
 - Factory reset (keep reset button pressed for more than 30 seconds) will erase all data on your device, including:
   - Wi-Fi settings
@@ -33,7 +33,7 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
   - Count lines on screen
 
 **Soft Reset:**
-- Soft reset (keep reset button pressed for 5 to 10 seconds) will only erase your Wi-Fi settings.
+- Soft reset (keep reset button pressed for 5 to 10 seconds, then unpress) will only erase your Wi-Fi settings.
 
 In other words:
 
