@@ -12,8 +12,6 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - Glue.
 - [Details printed on a 3D printer.](https://www.thingiverse.com/thing:6166463)
 - [Sketch for Arduino IDE.](https://github.com/coppermilk/wiener_linien_esp32_monitor/)
-# Project Overview
-The **ESP32-S3 Public Transport Departure Monitor** is a DIY device designed to enhance the efficiency of tracking and managing public transport departure times. This project was inspired by the frustrations of commuters who have grown tired of waiting endlessly at bus stops and train stations. Our device is tailored to provide precise information about the departure times of selected routes, helping users plan their journeys effectively.
 
 ## Key Features
 - **Real-time Countdown**: Stay informed about the next public transport departure times.
