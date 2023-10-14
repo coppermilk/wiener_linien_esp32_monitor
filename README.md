@@ -12,60 +12,67 @@ https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa6
 - Glue.
 - [Details printed on a 3D printer.](https://www.thingiverse.com/thing:6166463)
 - [Sketch for Arduino IDE.](https://github.com/coppermilk/wiener_linien_esp32_monitor/)
+# Project Overview
+The **ESP32-S3 Public Transport Departure Monitor** is a DIY device designed to enhance the efficiency of tracking and managing public transport departure times. This project was inspired by the frustrations of commuters who have grown tired of waiting endlessly at bus stops and train stations. Our device is tailored to provide precise information about the departure times of selected routes, helping users plan their journeys effectively.
+
+## Key Features
+- **Real-time Countdown**: Stay informed about the next public transport departure times.
+- **Timely Updates**: Data is automatically refreshed every 30 seconds to ensure accuracy.
+- **Easy Startup**: The device starts up automatically when the ESP32-S3 is booted.
+- **User-Friendly Interface**: A thoughtfully designed, intuitive interface for ease of use.
+- **Data Source**: Utilizes open data from the City of Vienna provided by Wiener Linien.
 
 ## Installation
-- Install T-Display S3 in Arduino. [YouTube tutorial.](https://www.youtube.com/watch?v=gpyeMjM9cOU&ab_channel=VolosProjects)
-- Clone or download this repository.
-- Open the Arduino IDE and install the required libraries (TFT_eSPI, ArduinoJson, HttpClient, WiFi).
-- Connect your ESP32 device to your computer.
-- Change the ssid and password variables in the code to match your Wi-Fi credentials.
-- Important: Update the URL variable in the code to select your specific RBL (reference bus stop). You can find your RBL [here](https://till.mabe.at/rbl/?line=102&station=4909).
-- Flash the code to your ESP32.
+To set up the ESP32-S3 Public Transport Departure Monitor, follow these steps:
+
+1. **Hardware Installation**:
+   - Begin by installing T-Display S3 in your Arduino. For a step-by-step guide, refer to this [YouTube tutorial](https://www.youtube.com/watch?v=gpyeMjM9cOU&ab_channel=VolosProjects).
+   
+2. **Repository Download**:
+   - Clone or download this repository to your local machine.
+
+3. **Library Installation**:
+   - Open the Arduino IDE and install the required libraries (TFT_eSPI, ArduinoJson, HttpClient, WiFi).
+
+4. **Device Connection**:
+   - Connect your ESP32 device to your computer.
+
+5. **Flash the Code**:
+   - Flash the code to your ESP32.
 
 ## Configuration
+Once the installation is complete, follow these steps to configure your device:
 [![Everything Is AWESOME](https://img.youtube.com/vi/vSUY8oJgrUI/0.jpg)](https://www.youtube.com/watch?v=vSUY8oJgrUI "Everything Is AWESOME")
+- **Connection**:
+  - Connect to the device's Wi-Fi network.
+
+- **Settings**:
+  - Enter your Wi-Fi SSID and password.
+  - Specify your RBL, which you can find [here](https://till.mabe.at/rbl/?line=102&station=4909).
+  - Optionally, select the number of lines to display.
+  - Optionally, define your filter criteria.
+  - Press the save button to save your settings.
 
 ## Resetting
 ![Reset Button](img/resset_button.png)
-**Factory Reset:**
-- Factory reset (keep reset button pressed for more than 30 seconds) will erase all data on your device, including:
-  - Wi-Fi settings
-  - StopID/RBL
-  - Stops filter
-  - Count lines on screen
+In case you need to reset your device, we offer two options:
 
-**Soft Reset:**
-- Soft reset (keep reset button pressed for 5 to 10 seconds, then unpress) will only erase your Wi-Fi settings.
+- **Factory Reset**:
+  - Perform a factory reset by keeping the reset button pressed for more than 30 seconds. This will erase all data on your device, including Wi-Fi settings, StopID/RBL, stop filters, and the count of lines displayed on the screen.
 
-In other words:
-
-- **Factory reset**: Erases everything, including Wi-Fi settings, StopID/RBL, stops filter, and count lines on the screen.
-- **Soft reset**: Erases only Wi-Fi settings.
+- **Soft Reset**:
+  - A soft reset involves keeping the reset button pressed for 5 to 10 seconds and then releasing it. This will only erase your Wi-Fi settings.
 
 ### When to Use Each Reset?
 
 **Use a Factory Reset if:**
-- You are giving away your device.
-- Your device is not working properly, and you have tried other troubleshooting steps.
+- You plan to give away your device.
+- Your device is malfunctioning, and other troubleshooting steps have failed.
 
 **Use a Soft Reset if:**
-- You are having trouble connecting to Wi-Fi.
+- You encounter Wi-Fi connectivity issues.
 - You want to restore your Wi-Fi settings to their default values.
 
+With the ESP32-S3 Public Transport Departure Monitor, we aim to make your daily commute more predictable and efficient, reducing the time spent waiting for public transport. Stay up-to-date with real-time departure information and plan your journeys with confidence.
 
-## Opportunities:
-- Displaying the countdown to the next public transport departures.
-- Updating information every 30 seconds, ensuring that the data is up to date.
-- Automatic startup when booting the ESP32-S3 device.
-- Authentic color design, providing ease of use.
-- Based on the open data of the City of Vienna provided by Wiener Linien.
-
-![Wien Liner Monitor](img/monitor.jpeg)
-## Description:
-The ESP32-S3 Public Transport Departure Monitor project is a homemade device designed to effectively track and manage the time of public transport departures. Inspired by the needs of citizens tired of endless waiting at bus stops, the project provides accurate data on the time of the next departures on selected routes.
-
-The main goal of the project is to reduce the waiting time at bus, tram and metro stops, allowing users to know when they need to leave home to arrive at the time of departure of transport. The project is equipped with a user-friendly interface and is automatically updated every 30 seconds to provide up-to-date information about the departure time.
-
-## Future plans:
-- [ ] Add support for multiple urban transport lines to track different routes and flexible travel planning.
-- [ ] Allow users to set preferences and favorite routes.
+![Vienna Liner Monitor](img/monitor.jpeg)
