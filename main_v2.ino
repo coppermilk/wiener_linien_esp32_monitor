@@ -1,18 +1,17 @@
 #include <ArduinoJson.h>  // by Benoit Blanchon 6.21.3
-#include <FS.h>
-#include <HTTPClient.h>
-#include <SPI.h>
-#include <SPIFFS.h>
-#include <TFT_eSPI.h>     // by Bodmer 2.5.0 installed manual
-#include <WiFiManager.h>  // by tzapu 2.0.16
 #include <esp_task_wdt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-
+#include <FS.h>
+#include <HTTPClient.h>
 #include <limits>
 #include <map>
+#include <SPIFFS.h>
+#include <SPI.h>
+#include <TFT_eSPI.h>  // by Bodmer 2.5.0 installed manual
 #include <unordered_map>
 #include <vector>
+#include <WiFiManager.h>  // by tzapu 2.0.16
 
 //#define DEBUG_SERIAL_WIEN_MONITOR 0
 #define TFT_BG tft.color565(0, 5, 0)
@@ -34,10 +33,27 @@ struct Monitor;
 struct ScreenEntity;
 struct StringDatase;
 
+std::vector<Monitor> GetMonitorsFromJson(const String&);
+std::vector<Monitor> GetFilteredMonitors(const std::vector<Monitor>&, const String&);
+std::vector<String> GetSplittedStrings(String, char);
+String FixJsonMistake(String);
+String GetRandomString(int);
+String GetJson(const String&);
+template<typename T> std::vector<T> cyclicSubset(const std::vector<T>&, size_t, size_t);
+void PrintSystemInfo();
+void PrintDebugMonitor(const Monitor&);
+void PrintDegbugMonitors(const std::vector<Monitor>&);
+void ResetActionsTask(void*);
+void ScreenUpdateTask(void*);
+void UpdateDataTask(void*);
+void WiFiManagerTask();
+
+// Global variables
 SemaphoreHandle_t dataMutex;
 TFT_eSPI tft = TFT_eSPI();
 Screen* p_screen = nullptr;
 TraficManager* pTraficManager = nullptr;
+
 
 /**
  * @struct StringDatabase
@@ -47,15 +63,15 @@ TraficManager* pTraficManager = nullptr;
 struct StringDatabase {
 private:
   /**
-   * @brief The prompt for finding RBL/Stop ID.
-   */
+     * @brief The prompt for finding RBL/Stop ID.
+     */
   const static constexpr char* RBLPrompt =
     "Find your RBL on https://till.mabe.at/rbl/."
     "<br>Example: \"49\".<br><br><b>RBL/Stop ID:</b>";
 
   /**
-   * @brief The prompt for filtering lines.
-   */
+     * @brief The prompt for filtering lines.
+     */
   const static constexpr char* LineFilterPrompt =
     "<i>Optional.</i>"
     "Filter the lines to show by comma-separating the directions."
@@ -65,17 +81,17 @@ private:
 
 public:
   /**
-   * @brief Get the Wi-Fi SSID string.
-   * @return The Wi-Fi SSID string.
-   */
+     * @brief Get the Wi-Fi SSID string.
+     * @return The Wi-Fi SSID string.
+     */
   static String GetWiFissid() {
     return "Wien Transport 🚇⏱️";
   }
 
   /**
-   * @brief Get the instructions text.
-   * @return The instructions text.
-   */
+     * @brief Get the instructions text.
+     * @return The instructions text.
+     */
   static String GetInstructionsText() {
     String instruction_start =
       "Wait a few seconds or:\n"
@@ -87,28 +103,28 @@ public:
   }
 
   /**
-   * @brief Get the RBL/Stop ID prompt.
-   * @return The RBL/Stop ID prompt.
-   */
+     * @brief Get the RBL/Stop ID prompt.
+     * @return The RBL/Stop ID prompt.
+     */
   static String GetRBLPrompt() {
     return String(RBLPrompt);
   }
 
   /**
-   * @brief Get the line filter prompt.
-   * @return The line filter prompt.
-   */
+     * @brief Get the line filter prompt.
+     * @return The line filter prompt.
+     */
   static String GetLineFilterPrompt() {
     return String(LineFilterPrompt);
   }
 
   /**
-   * @brief Get the prompt for specifying the number of lines to show.
-   * @param min The minimum number of lines.
-   * @param max The maximum number of lines.
-   * @param def The default number of lines.
-   * @return The prompt for specifying the number of lines to show.
-   */
+     * @brief Get the prompt for specifying the number of lines to show.
+     * @param min The minimum number of lines.
+     * @param max The maximum number of lines.
+     * @param def The default number of lines.
+     * @return The prompt for specifying the number of lines to show.
+     */
   static String GetLineCountPrompt(int min, int max, int def) {
     String range = GetFormatRange(min, max);
     String result =
@@ -123,13 +139,13 @@ public:
 
 private:
   /**
-   * @brief Format a range of values as a string.
-   * @param min The minimum value.
-   * @param max The maximum value.
-   * @return The formatted range string.
-   *
-   * Example: GetFormatRange(1, 3) returns "1, 2, or 3".
-   */
+     * @brief Format a range of values as a string.
+     * @param min The minimum value.
+     * @param max The maximum value.
+     * @return The formatted range string.
+     *
+     * Example: GetFormatRange(1, 3) returns "1, 2, or 3".
+     */
   static String GetFormatRange(int min, int max) {
     if (min > max) {
       // Swap min and max if min is greater than max
@@ -161,32 +177,32 @@ struct Config {
   static const int cnt_default_lines = 2;
 
   /**
-   * @brief Default constructor.
-   *
-   * Sets the number of lines to the default of cnt_default_lines.
-   */
+     * @brief Default constructor.
+     *
+     * Sets the number of lines to the default of cnt_default_lines.
+     */
   explicit Config()
     : cnt_lines(cnt_default_lines) {}
 
   /**
-   * @brief Copy constructor.
-   *
-   * Copies all of the members of the other Config object to this one.
-   *
-   * @param other The Config object to copy from.
-   */
+     * @brief Copy constructor.
+     *
+     * Copies all of the members of the other Config object to this one.
+     *
+     * @param other The Config object to copy from.
+     */
   Config(const Config& other)
     : cnt_lines(other.cnt_lines),
       lines_filter(other.lines_filter),
       lines_rbl(other.lines_rbl) {}
   /**
-   * @brief Assignment operator.
-   *
-   * Copies all of the members of the other Config object to this one.
-   *
-   * @param other The Config object to copy from.
-   * @return A reference to this Config object.
-   */
+     * @brief Assignment operator.
+     *
+     * Copies all of the members of the other Config object to this one.
+     *
+     * @param other The Config object to copy from.
+     * @return A reference to this Config object.
+     */
   Config& operator=(const Config& other) {
     if (this != &other) {
       lines_filter = other.lines_filter;
@@ -197,134 +213,134 @@ struct Config {
   }
 
   /**
-   * @brief Equality operator.
-   *
-   * Compares two Config objects for equality.
-   *
-   * @param other The Config object to compare to.
-   * @return True if the two Config objects are equal, false otherwise.
-   */
+     * @brief Equality operator.
+     *
+     * Compares two Config objects for equality.
+     *
+     * @param other The Config object to compare to.
+     * @return True if the two Config objects are equal, false otherwise.
+     */
   bool operator==(const Config& other) const {
-    return lines_filter == other.lines_filter 
-    && lines_rbl == other.lines_rbl 
-    && cnt_lines == other.cnt_lines;
+    return lines_filter == other.lines_filter
+           && lines_rbl == other.lines_rbl
+           && cnt_lines == other.cnt_lines;
   }
   /**
-   * @brief Inequality operator.
-   *
-   * Compares two Config objects for inequality.
-   *
-   * @param other The Config object to compare to.
-   * @return True if the two Config objects are not equal, false otherwise.
-   */
+     * @brief Inequality operator.
+     *
+     * Compares two Config objects for inequality.
+     *
+     * @param other The Config object to compare to.
+     * @return True if the two Config objects are not equal, false otherwise.
+     */
   bool operator!=(const Config& other) const {
     return !(*this == other);
   }
 
   /**
-   * @brief Sets the number of lines.
-   *
-   * Valid values are from cnt_min_lines to cnt_max_lines.
-   * If an invalid value is passed, the default
-   * value of cnt_default_lines will be used.
-   *
-   * @param count The number of lines to set.
-   */
+     * @brief Sets the number of lines.
+     *
+     * Valid values are from cnt_min_lines to cnt_max_lines.
+     * If an invalid value is passed, the default
+     * value of cnt_default_lines will be used.
+     *
+     * @param count The number of lines to set.
+     */
   void SetLinesCount(int c) {
     cnt_lines = verifyLinesCountInput(c);
   }
   /**
-   * @brief Sets the number of lines.
-   *
-   * Valid values are from cnt_min_lines to cnt_max_lines.
-   * If an invalid value is passed, the default
-   * value of cnt_default_lines will be used.
-   *
-   * @param str The number of lines to set as a string.
-   */
+     * @brief Sets the number of lines.
+     *
+     * Valid values are from cnt_min_lines to cnt_max_lines.
+     * If an invalid value is passed, the default
+     * value of cnt_default_lines will be used.
+     *
+     * @param str The number of lines to set as a string.
+     */
   void SetLinesCount(const String& c) {
     cnt_lines = verifyLinesCountInput(c.toInt());
   }
 
   /**
-   * @brief Gets the number of lines as an integer.
-   *
-   * @return The number of lines.
-   */
+     * @brief Gets the number of lines as an integer.
+     *
+     * @return The number of lines.
+     */
   int GetLinesCountAsInt() const {
     return cnt_lines;
   }
   /**
-   * @brief Gets the number of lines as a string.
-   *
-   * @return The number of lines as a string.
-   */
+     * @brief Gets the number of lines as a string.
+     *
+     * @return The number of lines as a string.
+     */
   const String GetLinesCountAsString() const {
     return String(cnt_lines);
   }
 
   /**
-   * @brief Sets the lines filter.
-   *
-   * @param str The lines filter to set.
-   */
+     * @brief Sets the lines filter.
+     *
+     * @param str The lines filter to set.
+     */
   void SetLinesFilter(const String& str) {
     lines_filter = str;
   }
   /**
-   * @brief Gets the lines filter as a string.
-   *
-   * @return The lines filter as a string.
-   */
+     * @brief Gets the lines filter as a string.
+     *
+     * @return The lines filter as a string.
+     */
   const String& GetLinesFilterAsString() const {
     return lines_filter;
   }
 
   /**
-   * @brief Sets the lines RBL.
-   *
-   * @param str The lines RBL to set.
-   */
+     * @brief Sets the lines RBL.
+     *
+     * @param str The lines RBL to set.
+     */
   void SetLinesRBL(const String& str) {
     lines_rbl = str;
   }
   /**
-   * @brief Sets the lines RBL.
-   *
-   * @param str The lines RBL to set as an integer.
-   */
+     * @brief Sets the lines RBL.
+     *
+     * @param str The lines RBL to set as an integer.
+     */
   void SetLinesRBL(int str) {
     lines_rbl = String(str, DEC);
   }
   /**
-   * @brief Gets the lines RBL as a string.
-   *
-   * @return The lines RBL as a string.
-   */
+     * @brief Gets the lines RBL as a string.
+     *
+     * @return The lines RBL as a string.
+     */
   const String& GetLinesRblAsString() const {
     return lines_rbl;
   }
   /**
-   * @brief Gets the lines RBL as an integer.
-   *
-   * @return The lines RBL as an integer.
-   */
+     * @brief Gets the lines RBL as an integer.
+     *
+     * @return The lines RBL as an integer.
+     */
   int GetLinesRblAsInt() {
     return lines_rbl.toInt();
   }
 
 private:
   /**
-   * @brief Verifies that the lines count input is valid.
-   *
-   * Valid values are from cnt_min_lines to cnt_max_lines.
-   * If an invalid value is passed, the default
-   * value of cnt_default_lines will be used.
-   *
-   * @param count The lines count input.
-   * @return The lines count input, if it is valid. Otherwise, the default
-   * count.
-   */
+     * @brief Verifies that the lines count input is valid.
+     *
+     * Valid values are from cnt_min_lines to cnt_max_lines.
+     * If an invalid value is passed, the default
+     * value of cnt_default_lines will be used.
+     *
+     * @param count The lines count input.
+     * @return The lines count input, if it is valid. Otherwise, the default
+     * count.
+     */
   static int verifyLinesCountInput(int count) {
     switch (count) {
       case cnt_min_lines ... cnt_max_lines:
@@ -353,10 +369,10 @@ private:
  */
 struct ConfigFileHandler {
   /**
-   * @brief Saves the configuration file to SPIFFS.
-   *
-   * @param cfg The configuration to save.
-   */
+     * @brief Saves the configuration file to SPIFFS.
+     *
+     * @param cfg The configuration to save.
+     */
   static void SaveConfigFile(Config& cfg) {
 #ifdef DEBUG_SERIAL_WIEN_MONITOR
     Serial.println(F("Saving config"));
@@ -381,11 +397,11 @@ struct ConfigFileHandler {
   }
 
   /**
-   * @brief Loads the configuration file from SPIFFS.
-   *
-   * @param cfg The configuration to load into.
-   * @return True if the config file was loaded successfully, false otherwise.
-   */
+     * @brief Loads the configuration file from SPIFFS.
+     *
+     * @param cfg The configuration to load into.
+     * @return True if the config file was loaded successfully, false otherwise.
+     */
   static bool LoadConfigFile(Config& cfg) {
     // clean FS, for testing
     // SPIFFS.format();
@@ -399,7 +415,7 @@ struct ConfigFileHandler {
       Serial.println("mounted file system");
 #endif
       if (SPIFFS.exists(JSON_CONFIG_FILE)) {
-// file exists, reading and loading
+        // file exists, reading and loading
 #ifdef DEBUG_SERIAL_WIEN_MONITOR
         Serial.println("reading config file");
 #endif
@@ -439,8 +455,8 @@ struct ConfigFileHandler {
   }
 
   /**
-   * @brief Deletes the configuration file from SPIFFS.
-   */
+     * @brief Deletes the configuration file from SPIFFS.
+     */
   static void DeleteConfigFile() {
     if (SPIFFS.begin()) {
       if (SPIFFS.exists(JSON_CONFIG_FILE)) {
@@ -518,10 +534,10 @@ private:
 
 public:
   /**
-   * @brief Gets the global settings.
-   *
-   * @return A reference to the global settings object.
-   */
+     * @brief Gets the global settings.
+     *
+     * @return A reference to the global settings object.
+     */
   const Config& GetConfig() {
     if (!is_config_loaded) {
       is_config_loaded = ConfigFileHandler::LoadConfigFile(config);
@@ -530,10 +546,10 @@ public:
   }
 
   /**
-   * @brief Sets the global settings.
-   *
-   * @param new_config The new global settings.
-   */
+     * @brief Sets the global settings.
+     *
+     * @param new_config The new global settings.
+     */
   void SetConfig(const Config& new_config) {
     config = new_config;
     ConfigFileHandler::SaveConfigFile(config);
@@ -541,8 +557,8 @@ public:
   }
 
   /**
-   * @brief Deletes the configuration file.
-   */
+     * @brief Deletes the configuration file.
+     */
   void DeleteFile() {
     ConfigFileHandler::DeleteConfigFile();
   }
@@ -577,39 +593,12 @@ struct Monitor {
   std::vector<int> countdown;
 };
 
-void PrintMonitorDegbug(const Monitor& monitor) {
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
-  Serial.print("Name: ");
-  Serial.print(monitor.name);
-  // Serial.print(" Towards: ");
-  // Serial.print(monitor.towards);
-  Serial.print(" Description: ");
-  Serial.print(monitor.description);
-
-  /*Serial.println("Countdown:");
-  for (int i = 0; i < monitor.countdown.size(); i++) {
-    Serial.print("  ");
-    Serial.print(monitor.countdown[i]);
-  }*/
-  Serial.println();
-#endif
-}
-
-void PrintMonitorDegbug(const std::vector<Monitor>& monitors) {
-  for (const auto& monitor : monitors) {
-    PrintMonitorDegbug(monitor);
-  }
-}
-
-void PrintResourceUsage();
-std::vector<Monitor> DeserilizeJson(const String& json);
-String GetJson(const String& rbl_id);
-
 struct ScreenEntity {
   String right_txt;  // Line name 2, 72, D etc.
   std::vector<String> lines;
   String left_txt;
 };
+
 
 /**
  * @brief The `Screen` class represents a screen with multiple rows, each
@@ -622,13 +611,13 @@ struct ScreenEntity {
 class Screen {
 public:
   /**
-   * @brief Constructor to initialize a `Screen` object with the specified
-   * number of rows and lines per idx_row.
-   *
-   * @param cnt_rows The number of rows on the screen.
-   * @param cnt_lines_in_row The number of lines of text that can be displayed
-   * in each idx_row.
-   */
+     * @brief Constructor to initialize a `Screen` object with the specified
+     * number of rows and lines per idx_row.
+     *
+     * @param cnt_rows The number of rows on the screen.
+     * @param cnt_lines_in_row The number of lines of text that can be displayed
+     * in each idx_row.
+     */
   Screen(int cnt_rows, int nLinesInRowCount)
     : px_max_width_name_text(0),
       px_max_width_countdown_text(0),
@@ -643,15 +632,16 @@ public:
                                    std::vector<bool>(nLinesInRowCount, false));
   }
 
+
 public:
   /**
-   * @brief Sets the content for a specific idx_row on the screen and updates
-   * its display.
-   *
-   * @param monitor The `Monitor` object containing the text and countdown
-   * information for the idx_row.
-   * @param idx_row The idx_row index to set the content for.
-   */
+     * @brief Sets the content for a specific idx_row on the screen and updates
+     * its display.
+     *
+     * @param monitor The `Monitor` object containing the text and countdown
+     * information for the idx_row.
+     * @param idx_row The idx_row index to set the content for.
+     */
   void SetRow(const ScreenEntity& monitor, int idx_row) {
     if (idx_row > cnt_rows - 1) {
       return;
@@ -676,6 +666,7 @@ public:
     const GFXfont* p_font = &FreeSansBold12pt7b;
     return GetMinTextSprite_px() >= CalculateFontWidth_px(p_font, str);
   }
+
 
   void PrintCordDebug() {
 #ifdef DEBUG_SERIAL_WIEN_MONITOR
@@ -705,41 +696,17 @@ public:
 #endif
   }
 
-private:
   /**
-   * @brief Converts a vector of German strings to Latin alphabet.
-   *
-   * Takes a vector of German strings and converts each string from
-   * German characters (e.g., ä, Ä, ö, Ö, ü, Ü, ß) to their Latin alphabet
-   * equivalents (a, A, o, O, u, U, s). The converted strings are then returned
-   * in a new vector.
-   *
-   * @param vecGerman A vector of German strings to be converted.
-   *
-   * @return A vector of strings in Latin alphabet.
-   */
-  std::vector<String> ConvertGermanToLatin(
-    const std::vector<String>& vecGerman) {
-    std::vector<String> output;
-    for (auto& str : vecGerman) {
-      output.push_back(ConvertGermanToLatin(str));
-      // Serial.println(ConvertGermanToLatin(str));
-    }
-    return output;
-  }
-
-public:
-  /**
-   * @brief Converts a single German string to Latin alphabet.
-   *
-   * This function takes a single German string and converts it from German
-   * characters (e.g., ä, Ä, ö, Ö, ü, Ü, ß) to their Latin alphabet equivalents
-   * (a, A, o, O, u, U, s).
-   *
-   * @param input The German string to be converted.
-   *
-   * @return The converted string in Latin alphabet.
-   */
+     * @brief Converts a single German string to Latin alphabet.
+     *
+     * This function takes a single German string and converts it from German
+     * characters (e.g., ä, Ä, ö, Ö, ü, Ü, ß) to their Latin alphabet equivalents
+     * (a, A, o, O, u, U, s).
+     *
+     * @param input The German string to be converted.
+     *
+     * @return The converted string in Latin alphabet.
+     */
   static String ConvertGermanToLatin(String input) {
     // TODO: optimize it.
     input.replace("ä", "a");
@@ -752,17 +719,43 @@ public:
     return input;
   }
 
+
   int GetMinTextSprite_px() {
     return px_min_text_sprite;
   }
+
 private:
   /**
-   * @brief Draws the countdown text on the screen for a specific idx_row.
-   *
-   * @param countdown The countdown text to be displayed.
-   * @param idx_row The idx_row index where the countdown text should be drawn.
-   * @param p_font The pointer to the p_font to be used for rendering the text.
-   */
+     * @brief Converts a vector of German strings to Latin alphabet.
+     *
+     * Takes a vector of German strings and converts each string from
+     * German characters (e.g., ä, Ä, ö, Ö, ü, Ü, ß) to their Latin alphabet
+     * equivalents (a, A, o, O, u, U, s). The converted strings are then returned
+     * in a new vector.
+     *
+     * @param vecGerman A vector of German strings to be converted.
+     *
+     * @return A vector of strings in Latin alphabet.
+     */
+  std::vector<String> ConvertGermanToLatin(
+    const std::vector<String>& vecGerman) {
+    std::vector<String> output;
+    for (auto& str : vecGerman) {
+      output.push_back(ConvertGermanToLatin(str));
+      // Serial.println(ConvertGermanToLatin(str));
+    }
+    return output;
+  }
+
+
+private:
+  /**
+     * @brief Draws the countdown text on the screen for a specific idx_row.
+     *
+     * @param countdown The countdown text to be displayed.
+     * @param idx_row The idx_row index where the countdown text should be drawn.
+     * @param p_font The pointer to the p_font to be used for rendering the text.
+     */
   void DrawCountdown(const String& countdown, int idx_row,
                      const GFXfont* pFont) const {
     int px_font_width = CalculateFontWidth_px(pFont, countdown);
@@ -772,27 +765,31 @@ private:
     DrawTextOnSprite(countdown, idx_row, px_dx_countdown_margin, 0, pFont,
                      GetMaxCountdownTextWidth_px());
   }
+
+
   /**
-   * @brief Draws the name text on the screen for a specific idx_row.
-   *
-   * @param name The name text to be displayed.
-   * @param idx_row The idx_row index where the name text should be drawn.
-   * @param p_font The pointer to the p_font to be used for rendering the text.
-   */
+     * @brief Draws the name text on the screen for a specific idx_row.
+     *
+     * @param name The name text to be displayed.
+     * @param idx_row The idx_row index where the name text should be drawn.
+     * @param p_font The pointer to the p_font to be used for rendering the text.
+     */
   void DrawName(const String& name, int row, const GFXfont* pFont) const {
     int dxNameMargin_px = px_margin;
     DrawTextOnSprite(name, row, dxNameMargin_px, 0, pFont,
                      GetMaxNameTextWidth_px());
   }
+
+
   /**
-   * @brief Sets and draws the middle lines and text content for a specific
-   * idx_row on the screen.
-   *
-   * @param vec_text_lines The vector of text lines to be displayed in the
-   * idx_row.
-   * @param idx_row The idx_row index where the text content should be set and
-   * drawn.
-   */
+     * @brief Sets and draws the middle lines and text content for a specific
+     * idx_row on the screen.
+     *
+     * @param vec_text_lines The vector of text lines to be displayed in the
+     * idx_row.
+     * @param idx_row The idx_row index where the text content should be set and
+     * drawn.
+     */
   void DrawMiddleText(const std::vector<String>& vec_text_lines, int idx_row) {
 
     const GFXfont* p_font = &FreeSansBold12pt7b;
@@ -855,20 +852,19 @@ private:
       sprite.pushSprite(x_cord, y_cord);
     }
     sprite.deleteSprite();
-    //
-
-    //
   }
+
+
   /**
-   * @brief Draws text on a sprite and pushes it to the screen at the specified
-   * coordinates.
-   *
-   * @param text The text to be drawn on the sprite.
-   * @param idx_row The idx_row index where the text should be displayed.
-   * @param x The X-coordinate where the text should be drawn.
-   * @param y The Y-coordinate where the text should be drawn.
-   * @param p_font The pointer to the p_font to be used for rendering the text.
-   */
+     * @brief Draws text on a sprite and pushes it to the screen at the specified
+     * coordinates.
+     *
+     * @param text The text to be drawn on the sprite.
+     * @param idx_row The idx_row index where the text should be displayed.
+     * @param x The X-coordinate where the text should be drawn.
+     * @param y The Y-coordinate where the text should be drawn.
+     * @param p_font The pointer to the p_font to be used for rendering the text.
+     */
   void DrawTextOnSprite(const String& text, int idx_row, int x, int y,
                         const GFXfont* p_font, int px_max_width) const {
     const int px_width_sprite = CalculateFontWidth_px(p_font, text);
@@ -943,17 +939,18 @@ private:
 
     // Create and display text sprite
     /*sprite.createSprite(px_width_sprite, px_height_font);
-        sprite.fillSprite(color_middle);
-        sprite.setTextColor(TFT_TEXT);
-        sprite.setFreeFont(p_font);
-        sprite.drawString(text, 0, 0);*/
+            sprite.fillSprite(color_middle);
+            sprite.setTextColor(TFT_TEXT);
+            sprite.setFreeFont(p_font);
+            sprite.drawString(text, 0, 0);*/
     sprite.pushSprite(x, y + dy + (px_height_full * idx_row));
     sprite.deleteSprite();
   }
 
+
   /**
-   * @brief Draws separator lines between rows on the screen.
-   */
+     * @brief Draws separator lines between rows on the screen.
+     */
   void drawLines() const {
     // Create a TFT_eSprite for drawing separator lines
     TFT_eSprite lines_separator(&tft);
@@ -973,58 +970,68 @@ private:
     // Delete the sprite to free up memory
     lines_separator.deleteSprite();
   }
+
+
   /**
-   * @brief Sets the maximum px_width of the name text in pixels.
-   *
-   * @param px_w Width of the name text in pixels to compare with the current
-   * maximum.
-   */
+     * @brief Sets the maximum px_width of the name text in pixels.
+     *
+     * @param px_w Width of the name text in pixels to compare with the current
+     * maximum.
+     */
   void SetMaxNameTextWidth_px(int px_w) {
     if (px_w > px_max_width_name_text) {
       px_max_width_name_text = px_w;
       tft.fillScreen(TFT_BG);
     }
   }
+
+
   /**
-   * @brief Sets the maximum px_width of the countdown text in pixels.
-   *
-   * @param px_w The px_width of the countdown text in pixels to compare with
-   * the current maximum.
-   */
+     * @brief Sets the maximum px_width of the countdown text in pixels.
+     *
+     * @param px_w The px_width of the countdown text in pixels to compare with
+     * the current maximum.
+     */
   void SetMaxCountdownTextWidth_px(int px_w) {
     if (px_w > px_max_width_countdown_text) {
       px_max_width_countdown_text = px_w;
       tft.fillScreen(TFT_BG);
     }
   }
+
+
   /**
-   * @brief Gets the maximum px_width of the countdown text in pixels.
-   *
-   * @return The maximum px_width of the countdown text in pixels.
-   */
+     * @brief Gets the maximum px_width of the countdown text in pixels.
+     *
+     * @return The maximum px_width of the countdown text in pixels.
+     */
   int GetMaxCountdownTextWidth_px() const {
     return px_max_width_countdown_text;
   }
+
+
   /**
-   * @brief Gets the maximum px_width of the name text in pixels.
-   *
-   * @return The maximum px_width of the name text in pixels.
-   */
+     * @brief Gets the maximum px_width of the name text in pixels.
+     *
+     * @return The maximum px_width of the name text in pixels.
+     */
   int GetMaxNameTextWidth_px() const {
     return px_max_width_name_text;
   }
+
+
   /**
-   * @brief Calculates the coordinate position of a line based on the specified
-   * parameters.
-   *
-   * @param bodyLength The total length of the body where lines are positioned.
-   * @param segmentMargin The margin between segments.
-   * @param segmentLength The length of each segment.
-   * @param segmentCount The total number of segments.
-   * @param n The index of the line.
-   *
-   * @return The Coordinate position of the line.
-   */
+     * @brief Calculates the coordinate position of a line based on the specified
+     * parameters.
+     *
+     * @param bodyLength The total length of the body where lines are positioned.
+     * @param segmentMargin The margin between segments.
+     * @param segmentLength The length of each segment.
+     * @param segmentCount The total number of segments.
+     * @param n The index of the line.
+     *
+     * @return The Coordinate position of the line.
+     */
   int CalculateLineDistance_px(double bodyLength, double segmentMargin,
                                double segmentLength, int segmentCount,
                                int n) const {
@@ -1047,14 +1054,15 @@ private:
     return static_cast<int>(finalPosition);
   }
 
+
   /**
-   * @brief Calculates the px_width of a text string using the specified p_font.
-   *
-   * @param p_font The p_font used for rendering the text.
-   * @param str The text string to calculate the px_width for.
-   *
-   * @return The px_width of the text string in pixels.
-   */
+     * @brief Calculates the px_width of a text string using the specified p_font.
+     *
+     * @param p_font The p_font used for rendering the text.
+     * @param str The text string to calculate the px_width for.
+     *
+     * @return The px_width of the text string in pixels.
+     */
   int CalculateFontWidth_px(const GFXfont* p_font, const String& str) const {
     // This symbol not exist in p_font this squares draw manuany
     // In squeres Width == Height
@@ -1068,18 +1076,20 @@ private:
     Calculator.deleteSprite();
     return px_w;
   }
+
+
   /**
-   * @brief Calculates the height of the text when rendered using the specified
-   * p_font.
-   *
-   * This function creates a temporary sprite, sets the provided p_font, and
-   * then retrieves the p_font height.
-   *
-   * @param p_font The p_font used for rendering the text.
-   *
-   * @return The height of the text when rendered with the specified p_font in
-   * pixels.
-   */
+     * @brief Calculates the height of the text when rendered using the specified
+     * p_font.
+     *
+     * This function creates a temporary sprite, sets the provided p_font, and
+     * then retrieves the p_font height.
+     *
+     * @param p_font The p_font used for rendering the text.
+     *
+     * @return The height of the text when rendered with the specified p_font in
+     * pixels.
+     */
   int CalculatefontHeight_px(const GFXfont* p_font) const {
     // Getter V1
     // TFT_eSprite Calculator = TFT_eSprite(&tft);
@@ -1124,10 +1134,12 @@ private:
     return height;
   }
 
+
   void SetMinTextSprite_px(int px_min) {
     // Serial.println(px_min_text_sprite);
     px_min_text_sprite = min(px_min_text_sprite, px_min);
   }
+
 
   ///< The maximum px_width of the name text in pixels.
   int px_max_width_name_text;
@@ -1172,6 +1184,7 @@ public:
     }
   }
 
+
   void SelectiveResetScroll(const std::vector<bool>& isNeedReset) {
     // printf("\n\n%d %d\n\n ", vec_init_scrolls_coords.size(),
     // isNeedReset.size());
@@ -1195,7 +1208,445 @@ public:
   }
 };
 
-void printTransport(const Monitor& t) {
+
+
+class TraficClock {
+public:
+  TraficClock(long ms_perCountdown, long cd_perIterations, long it_perHour)
+    : kMillisecondsPerCountdown(ms_perCountdown),
+      kCountdownsPerIteration(cd_perIterations),
+      kIterationsPerHour(it_perHour) {
+    Reset();
+  }
+
+private:
+  const unsigned long kMillisecondsPerCountdown = 5000;
+  const long kCountdownsPerIteration = 2;
+  const long kIterationsPerHour = 2;
+  unsigned long start_time_;
+
+
+  unsigned long Milliseconds() const {
+    return millis();
+  }
+
+
+  long GetTotalCountdown() const {
+    unsigned long totalMilliseconds = Milliseconds();
+    return totalMilliseconds / kMillisecondsPerCountdown;
+  }
+
+
+  long GetTotalIteration() const {
+    return GetTotalCountdown() / kCountdownsPerIteration;
+  }
+
+
+public:
+  void Reset() {
+    start_time_ = millis();
+  }
+
+
+  long GetCountdown() const {
+    long seconds = GetTotalCountdown() % kCountdownsPerIteration;
+    return seconds;
+  }
+
+
+  long GetIteration() const {
+    long iterations = GetTotalIteration() % kIterationsPerHour;
+    return iterations;
+  }
+
+
+  long GetFullCycle() const {
+    long cycle = GetTotalIteration() / kIterationsPerHour;
+    return cycle;
+  }
+
+
+  void PrintTime() const {
+#if 1
+    Serial.print("Time: ");
+    Serial.print(GetFullCycle());
+    Serial.print(":");
+    Serial.print(GetIteration());
+    Serial.print(":");
+    Serial.print(GetCountdown());
+    Serial.print(".");
+    Serial.println(Milliseconds());
+#endif
+  }
+};
+
+class TraficManager {
+public:
+  TraficManager()
+    : shift_cnt(0), coundown_idx(0), p_trafic_clock(nullptr) {}
+
+
+  ~TraficManager() {
+    delete p_trafic_clock;
+  }
+
+
+  // Block 1: Update Traffic Data
+  void update(const std::vector<Monitor>& vec) {
+    //shift_cnt = 0;
+    prev_iterations = 0;
+    //SmartWatch sm(__FUNCTION__);
+
+    if (p_trafic_clock) {
+      p_trafic_clock->Reset();
+      const int& cnt_lines = global_settings.GetConfig().GetLinesCountAsInt();
+      const int trafic_set_size = static_cast<int>(all_trafic_set.size());
+      int rows_in_screen_cnt = std::min(cnt_lines, trafic_set_size);
+      auto currentTraficSubset =
+        cyclicSubset(all_trafic_set, rows_in_screen_cnt, shift_cnt);
+      auto futureTraficSubset =
+        cyclicSubset(vec, rows_in_screen_cnt, shift_cnt);
+
+      sortTrafic(currentTraficSubset);
+      sortTrafic(futureTraficSubset);
+
+#ifdef DEBUG_SERIAL_WIEN_MONITOR
+
+      Serial.println("updater_");
+#endif
+      SelectiveReset(currentTraficSubset, futureTraficSubset);
+    }
+    all_trafic_set = vec;
+  }
+
+
+  /**
+   * @brief Updates the screen with traffic information.
+   */
+  void updateScreen() {
+    if (all_trafic_set.empty()) {
+      return;
+    }
+
+    const int& cnt_lines = global_settings.GetConfig().GetLinesCountAsInt();
+    const int& cnt_countdows = global_settings.cnt_shows_countdows;
+    const int& ms_additional = global_settings.ms_additional_time_for_countdown;
+    const int& ms_full_cycle = global_settings.ms_task_delay_data_update;
+
+    const int trafic_set_size = static_cast<int>(all_trafic_set.size());
+    int rows_in_screen_cnt = std::min(cnt_lines, trafic_set_size);
+    auto currentTraficSubset =
+      cyclicSubset(all_trafic_set, rows_in_screen_cnt, shift_cnt);
+
+    sortTrafic(currentTraficSubset);
+
+    if (!p_trafic_clock) {
+      double f_size = static_cast<double>(all_trafic_set.size());
+      double f_sceen_cells = static_cast<double>(cnt_lines);
+
+      long iterations_cnt = static_cast<long>(ceil(f_size / f_sceen_cells));
+
+      long iteration_ms = ms_full_cycle / iterations_cnt;
+      long countdown_ms = iteration_ms / cnt_countdows;
+      p_trafic_clock = new TraficClock(countdown_ms + ms_additional,
+                                       cnt_countdows, iterations_cnt);
+      return;
+    }
+    //p_trafic_clock->PrintTime();
+    if (p_trafic_clock) {
+      // p_trafic_clock->PrintTime();
+      long cur_iterations = p_trafic_clock->GetIteration();
+      coundown_idx = p_trafic_clock->GetCountdown();
+      if (cur_iterations != prev_iterations) {
+        prev_iterations = cur_iterations;
+
+        auto futureSubset = cyclicSubset(all_trafic_set, rows_in_screen_cnt,
+                                         shift_cnt + cnt_lines);
+
+        sortTrafic(futureSubset);
+#ifdef DEBUG_SERIAL_WIEN_MONITOR
+        Serial.println("inner_");
+#endif
+        SelectiveReset(currentTraficSubset, futureSubset);
+        shift_cnt += global_settings.GetConfig().GetLinesCountAsInt();
+      }
+    }
+
+    DrawTraficOnScreen(currentTraficSubset);
+  }
+
+
+  /**
+   * @brief Resets the scrolling for monitors that have different descriptions.
+   * @param currentTrafficSubset The current subset of traffic monitors.
+   * @param futureSubset The future subset of traffic monitors.
+   */
+  void SelectiveReset(const std::vector<Monitor>& currentTraficSubset,
+                      const std::vector<Monitor>& futureSubset) {
+    // p_screen->PrintCordDebug();
+    if (currentTraficSubset.size() == futureSubset.size()) {
+      //PrintDegbugMonitors(currentTraficSubset);
+      //PrintDegbugMonitors(futureSubset);
+
+      size_t size = futureSubset.size();
+      std::vector<bool> isNeedReset(size, true);
+      for (size_t i = 0; i < size; ++i) {
+        if (currentTraficSubset[i].description.isEmpty()
+            || futureSubset[i].description.isEmpty()) {
+          isNeedReset[i] = true;
+        } else if (currentTraficSubset[i].description
+                   == futureSubset[i].description) {
+          isNeedReset[i] = false;
+        }
+      }
+
+      // update only for difrent names
+      if (currentTraficSubset.size() > 1) {
+#ifdef DEBUG_SERIAL_WIEN_MONITOR
+        for (size_t k = 0; k < isNeedReset.size(); k++) {
+          Serial.print(isNeedReset[k]);
+          Serial.print(" ");
+        }
+        Serial.println("");
+#endif
+        p_screen->SelectiveResetScroll(isNeedReset);
+      }
+    }
+
+    // p_screen->PrintCordDebug();
+  }
+
+
+  /**
+   * @brief Sorts traffic monitors based on countdown values.
+   * @param v The vector of traffic monitors to be sorted.
+   */
+  void sortTrafic(std::vector<Monitor>& v) {
+    std::sort(v.begin(), v.end(), [](const Monitor& a, const Monitor& b) {
+      return a.countdown < b.countdown;
+    });
+  }
+
+
+  /**
+   * @brief Returns a valid countdown string at the given index.
+   * @param c The vector of countdown values.
+   * @param index The index to retrieve the countdown value from.
+   * @return A valid countdown string.
+   */
+  String GetValidCountdown(const std::vector<int>& c, size_t index) {
+    if (c.empty()) {
+      return String();
+    }
+
+    size_t best_index = std::min(index, c.size() - 1);
+    return String(c[best_index], DEC);
+  }
+
+
+  /**
+   * @brief Draws traffic information on the screen using the provided data.
+   * @param currentTrafficSubset A vector of Monitor objects representing the
+   *                            current traffic data to display.
+   */
+  void DrawTraficOnScreen(const std::vector<Monitor>& currentTrafficSubset) {
+    // Get the number of lines to display
+    size_t numLines = global_settings.GetConfig().GetLinesCountAsInt();
+
+    // Iterate through each line on the screen
+    for (size_t i = 0; i < numLines; ++i) {
+      ScreenEntity monitor;
+      std::vector<String> clean_str;
+      for (size_t x = 0; x < global_settings.cnt_screen_lines_per_rows; ++x) {
+        clean_str.push_back("");
+        clean_str.push_back("");
+      }
+       //std::vector<String>(global_settings.cnt_screen_lines_per_rows, "");
+
+      // Check if there's at least one monitor in the subset
+      if (!currentTrafficSubset.empty()) {
+        size_t monior_idx = i % currentTrafficSubset.size();
+        // dont heve cyrcular arry
+        if (i > (currentTrafficSubset.size() - 1)
+            && currentTrafficSubset.size() > 1) {
+          break;
+        }
+
+        const Monitor& currentMonitor = currentTrafficSubset[monior_idx];
+        if (i > currentMonitor.countdown.size() - 1
+            && currentTrafficSubset.size() == 1) {
+          // break if this cyclig getting
+          break;
+        }
+        size_t idx = currentTrafficSubset.size() == 1 ? i : coundown_idx;
+        if (currentTrafficSubset.size() == 1
+            && idx > currentMonitor.countdown.size()) {
+          // break if this single line and countdown for this line cycle
+          break;
+        }
+        // Set the right text
+        monitor.right_txt = currentMonitor.name;
+
+        if (!currentMonitor.countdown.empty()) {
+          if (currentMonitor.countdown[idx] == 0) {
+            if ((millis() / 1000) % 2) {
+              monitor.left_txt = String("◱");
+            } else {
+              monitor.left_txt = String("◳");
+            }
+          } else {
+            monitor.left_txt = GetValidCountdown(currentMonitor.countdown, idx);
+          }
+        }
+        // Serial.println("block 2");
+        // Set lines for display
+
+        auto splitted_string = getSplittedStringFromCache(currentMonitor.towards);
+        size_t cnt_sub_rows = min(
+          static_cast<size_t>(global_settings.cnt_screen_lines_per_rows),
+          splitted_string.size());
+        for (size_t j = 0; j < cnt_sub_rows; ++j) {
+          clean_str[j] = splitted_string[j];
+        }
+
+        // if splitted string error
+        if (splitted_string.empty()) {
+          clean_str[0] = currentMonitor.towards;
+        }
+        // TODO: oprimize it
+        if (currentMonitor.description.length()) {
+          clean_str[1] = currentMonitor.description;
+        }
+      }
+      monitor.lines = clean_str;
+      // Serial.println("block 3");
+      //  Set the idx_row on the screen
+      p_screen->SetRow(monitor, i);
+      // p_screen->PrintCordDebug();
+#ifdef DEBUG_SERIAL_WIEN_MONITOR
+      for (size_t m = 0; m < monitor.lines.size(); m++) {
+        Serial.print(i);
+        Serial.print(": ");
+        Serial.println(monitor.lines[m]);
+      }
+#endif
+      // Serial.println("roww setted;");
+    }
+  }
+
+  int last_min_size = -1;  // Initialize last_min_size to an invalid value
+  std::map<String, std::vector<String>> SplittedStringCache;
+
+  /**
+   * @brief Retrieves or generates a vector of split strings from a cache.
+   * @param key_string The key string used to retrieve or generate split strings.
+   * @return A vector of split strings either from the cache or generated.
+   */
+  std::vector<String> getSplittedStringFromCache(const String& key_string) {
+    int min_size = p_screen->GetMinTextSprite_px();
+
+    if (last_min_size != min_size) {
+      // Clear the cache if min_size has changed
+      SplittedStringCache.clear();
+      last_min_size = min_size;
+    }
+
+    auto cacheIt = SplittedStringCache.find(key_string);
+    if (cacheIt != SplittedStringCache.end()) {
+      // Found in the cache, return it
+      //Serial.println("return from cache");
+      return cacheIt->second;
+    }
+
+    // Generate and cache the result
+    std::vector<String> generatedStrings = splitToString(key_string);
+    SplittedStringCache[key_string] = generatedStrings;
+    return generatedStrings;
+  }
+
+  /**
+     * @brief Splits a string into individual words and stores them in a vector.
+     * @param str The input string to be split.
+     * @param words A vector to store the individual words.
+     */
+  void splitStringToWords(const String& str, std::vector<String>& words) {
+    // SmartWatch sm(__FUNCTION__);
+    String currentWord = "";
+
+    for (size_t i = 0; i < str.length(); i++) {
+      currentWord += str.charAt(i);
+
+      // If the current character is a space or a hyphen
+      if (str.charAt(i) == ' ' || str.charAt(i) == '-') {
+        // Add the current word to the words vector
+        if (p_screen->IsEnoughSpaceForMiddleText(currentWord)) {
+          words.push_back(currentWord);
+        }
+        currentWord = "";
+      }
+    }
+
+    // Add the remaining word if it's not empty
+    if (!currentWord.isEmpty()
+        && p_screen->IsEnoughSpaceForMiddleText(currentWord)) {
+      words.push_back(currentWord);
+    }
+  }
+
+  /**
+     * @brief Splits a string into subtexts that fit within one line.
+     * @param input The input string to be split into subtexts.
+     * @return A vector of subtexts that fit within one line.
+     */
+  std::vector<String> splitToString(const String& input) {
+    // SmartWatch sm(__FUNCTION__);
+    std::vector<String> words;
+    splitStringToWords(input, words);
+
+    // Create a list of subtexts
+    std::vector<String> subtexts;
+    String currentSubtext = "";
+
+    // Add words to the subtexts list as long as they fit in one line
+    for (size_t i = 0; i < words.size(); i++) {
+      if (p_screen->IsEnoughSpaceForMiddleText(currentSubtext + " " + words[i])) {
+        currentSubtext += words[i];
+      } else {
+        if (!currentSubtext.isEmpty()) {
+          subtexts.push_back(currentSubtext);
+        }
+        currentSubtext = words[i];
+      }
+    }
+
+    if (!currentSubtext.isEmpty()) {
+      subtexts.push_back(currentSubtext);
+    }
+
+    for (size_t i = 0; i < subtexts.size(); i++) {
+      if (!subtexts[i].isEmpty() && (subtexts.size() - 1 != i)) {
+        subtexts[i] = subtexts[i].substring(0, subtexts[i].length() - 1);
+      }
+    }
+
+    return subtexts;
+  }
+
+private:
+  std::vector<Monitor> all_trafic_set;
+  int shift_cnt;
+  int coundown_idx;
+  // unsigned long previousMillisTraficSet;
+  // unsigned long previousMillisCountDown;
+  // const int INTERVAL_UPDATE = global_settings.ms_task_delay_data_update;
+  TraficClock* p_trafic_clock;
+  long prev_iterations = 0;
+};
+
+////////////////////////////Functions////////////////////////////////////////////
+
+
+void PrintDebugMonitor(const Monitor& t) {
 #ifdef DEBUG_SERIAL_WIEN_MONITOR
   Serial.println("==========");
   Serial.println("Name: " + t.name);
@@ -1213,9 +1664,10 @@ void printTransport(const Monitor& t) {
 #endif
 }
 
+
 String FixJsonMistake(String word) {
   word = Screen::ConvertGermanToLatin(word);
-// Проверяем, содержит ли входная строка пробелы
+  // Проверяем, содержит ли входная строка пробелы
 #if DEBUG_SERIAL_WIEN_MONITOR
   Serial.println(word);
 #endif
@@ -1234,8 +1686,16 @@ String FixJsonMistake(String word) {
   return word;
 }
 
-std::vector<Monitor> DeserilizeJson(const String& json) {
-  SmartWatch sm(__FUNCTION__);
+
+void PrintDegbugMonitors(const std::vector<Monitor>& monitors) {
+  for (const auto& monitor : monitors) {
+    PrintDegbugMonitors(monitor);
+  }
+}
+
+
+std::vector<Monitor> GetMonitorsFromJson(const String& json) {
+  //SmartWatch sm(__FUNCTION__);
   std::vector<Monitor> monitors_vec;
 
   DynamicJsonDocument root(2048 * 8);
@@ -1328,8 +1788,8 @@ std::vector<Monitor> DeserilizeJson(const String& json) {
           auto it =
             std::find_if(monitors_vec.begin(), monitors_vec.end(),
                          [&cur_monitor](const Monitor& monitor) {
-                           return monitor.name == cur_monitor.name 
-                           && monitor.towards == cur_monitor.towards;
+                           return monitor.name == cur_monitor.name
+                                  && monitor.towards == cur_monitor.towards;
                          });
 
           if (it == monitors_vec.end()) {
@@ -1349,445 +1809,8 @@ std::vector<Monitor> DeserilizeJson(const String& json) {
   return monitors_vec;
 }
 
-template<typename T>
-std::vector<T> cyclicSubset(const std::vector<T>& input, size_t N,
-                            size_t start) {
-  std::vector<T> result;
-  size_t size = input.size();
 
-  // Если входной вектор пустой или N равно 0, вернуть пустой результат.
-  if (input.empty() || N == 0) {
-    return result;
-  }
-
-  // Начнем с элемента start и будем добавлять элементы в результат.
-  for (size_t i = start; i < start + N; ++i) {
-    result.push_back(input[i % size]);
-  }
-
-  return result;
-}
-
-class TraficClock {
-public:
-  TraficClock(long ms_perCountdown, long cd_perIterations, long it_perHour)
-    : kMillisecondsPerCountdown(ms_perCountdown),
-      kCountdownsPerIteration(cd_perIterations),
-      kIterationsPerHour(it_perHour) {
-    Reset();
-  }
-
-private:
-  const unsigned long kMillisecondsPerCountdown = 5000;
-  const long kCountdownsPerIteration = 2;
-  const long kIterationsPerHour = 2;
-  unsigned long start_time_;
-
-  unsigned long Milliseconds() const {
-    return millis();
-  }
-
-  long GetTotalCountdown() const {
-    unsigned long totalMilliseconds = Milliseconds();
-    return totalMilliseconds / kMillisecondsPerCountdown;
-  }
-
-  long GetTotalIteration() const {
-    return GetTotalCountdown() / kCountdownsPerIteration;
-  }
-
-public:
-  void Reset() {
-    start_time_ = millis();
-  }
-
-  long GetCountdown() const {
-    long seconds = GetTotalCountdown() % kCountdownsPerIteration;
-    return seconds;
-  }
-
-  long GetIteration() const {
-    long iterations = GetTotalIteration() % kIterationsPerHour;
-    return iterations;
-  }
-
-  long GetFullCycle() const {
-    long cycle = GetTotalIteration() / kIterationsPerHour;
-    return cycle;
-  }
-
-  void PrintTime() const {
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
-    Serial.print("Time: ");
-    Serial.print(GetFullCycle());
-    Serial.print(":");
-    Serial.print(GetIteration());
-    Serial.print(":");
-    Serial.print(GetCountdown());
-    Serial.print(".");
-    Serial.println(Milliseconds());
-#endif
-  }
-};
-
-class TraficManager {
-public:
-  TraficManager()
-    : shift_cnt(0), coundown_idx(0), p_trafic_clock(nullptr) {}
-
-  ~TraficManager() {
-    delete p_trafic_clock;
-  }
-
-  // Block 1: Update Traffic Data
-  void update(const std::vector<Monitor>& vec) {
-    shift_cnt = 0;
-    prev_iterations = 0;
-    SmartWatch sm(__FUNCTION__);
-
-    if (p_trafic_clock) {
-      p_trafic_clock->Reset();
-      const int& cnt_lines = global_settings.GetConfig().GetLinesCountAsInt();
-      const int trafic_set_size = static_cast<int>(all_trafic_set.size());
-      int rows_in_screen_cnt = std::min(cnt_lines, trafic_set_size);
-      auto currentTraficSubset =
-        cyclicSubset(all_trafic_set, rows_in_screen_cnt, shift_cnt);
-      auto futureTraficSubset =
-        cyclicSubset(vec, rows_in_screen_cnt, shift_cnt);
-
-      sortTrafic(currentTraficSubset);
-      sortTrafic(futureTraficSubset);
-
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
-
-      Serial.println("updater_");
-#endif
-      SelectiveReset(currentTraficSubset, futureTraficSubset);
-    }
-    all_trafic_set = vec;
-  }
-
-  /**
- * @brief Updates the screen with traffic information.
- */
-  void updateScreen() {
-    if (all_trafic_set.empty()) {
-      return;
-    }
-
-    const int& cnt_lines = global_settings.GetConfig().GetLinesCountAsInt();
-    const int& cnt_countdows = global_settings.cnt_shows_countdows;
-    const int& ms_additional = global_settings.ms_additional_time_for_countdown;
-    const int& ms_full_cycle = global_settings.ms_task_delay_data_update;
-
-    const int trafic_set_size = static_cast<int>(all_trafic_set.size());
-    int rows_in_screen_cnt = std::min(cnt_lines, trafic_set_size);
-    auto currentTraficSubset =
-      cyclicSubset(all_trafic_set, rows_in_screen_cnt, shift_cnt);
-
-    sortTrafic(currentTraficSubset);
-
-    if (!p_trafic_clock) {
-      double f_size = static_cast<double>(all_trafic_set.size());
-      double f_sceen_cells = static_cast<double>(cnt_lines);
-
-      long iterations_cnt = static_cast<long>(ceil(f_size / f_sceen_cells));
-
-      long iteration_ms = ms_full_cycle / iterations_cnt;
-      long countdown_ms = iteration_ms / cnt_countdows;
-      p_trafic_clock = new TraficClock(countdown_ms + ms_additional,
-                                       cnt_countdows, iterations_cnt);
-      return;
-    }
-
-    if (p_trafic_clock) {
-      // p_trafic_clock->PrintTime();
-      long cur_iterations = p_trafic_clock->GetIteration();
-      coundown_idx = p_trafic_clock->GetCountdown();
-      if (cur_iterations != prev_iterations) {
-        prev_iterations = cur_iterations;
-
-        auto futureSubset = cyclicSubset(all_trafic_set, rows_in_screen_cnt,
-                                         shift_cnt + cnt_lines);
-
-        sortTrafic(futureSubset);
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
-        Serial.println("inner_");
-#endif
-        SelectiveReset(currentTraficSubset, futureSubset);
-        shift_cnt += global_settings.GetConfig().GetLinesCountAsInt();
-      }
-    }
-
-    DrawTraficOnScreen(currentTraficSubset);
-  }
-
-
-  /**
- * @brief Resets the scrolling for monitors that have different descriptions.
- * @param currentTrafficSubset The current subset of traffic monitors.
- * @param futureSubset The future subset of traffic monitors.
- */
-  void SelectiveReset(const std::vector<Monitor>& currentTraficSubset,
-                      const std::vector<Monitor>& futureSubset) {
-    // p_screen->PrintCordDebug();
-    if (currentTraficSubset.size() == futureSubset.size()) {
-      PrintMonitorDegbug(currentTraficSubset);
-      PrintMonitorDegbug(futureSubset);
-
-      size_t size = futureSubset.size();
-      std::vector<bool> isNeedReset(size, true);
-      for (size_t i = 0; i < size; ++i) {
-        if (currentTraficSubset[i].description.isEmpty()
-            || futureSubset[i].description.isEmpty()) {
-          isNeedReset[i] = true;
-        } else if (currentTraficSubset[i].description
-                   == futureSubset[i].description) {
-          isNeedReset[i] = false;
-        }
-      }
-
-      // update only for difrent names
-      if (currentTraficSubset.size() > 1) {
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
-        for (size_t k = 0; k < isNeedReset.size(); k++) {
-          Serial.print(isNeedReset[k]);
-          Serial.print(" ");
-        }
-        Serial.println("");
-#endif
-        p_screen->SelectiveResetScroll(isNeedReset);
-      }
-    }
-
-    // p_screen->PrintCordDebug();
-  }
-
-
-  /**
- * @brief Sorts traffic monitors based on countdown values.
- * @param v The vector of traffic monitors to be sorted.
- */
-  void sortTrafic(std::vector<Monitor>& v) {
-    std::sort(v.begin(), v.end(), [](const Monitor& a, const Monitor& b) {
-      return a.countdown < b.countdown;
-    });
-  }
-
-
-  /**
- * @brief Returns a valid countdown string at the given index.
- * @param c The vector of countdown values.
- * @param index The index to retrieve the countdown value from.
- * @return A valid countdown string.
- */
-  String GetValidCountdown(const std::vector<int>& c, size_t index) {
-    if (c.empty()) {
-      return String();
-    }
-
-    size_t best_index = std::min(index, c.size() - 1);
-    return String(c[best_index], DEC);
-  }
-
-  /**
- * @brief Draws traffic information on the screen using the provided data.
- * @param currentTrafficSubset A vector of Monitor objects representing the
- *                            current traffic data to display.
- */
-  void DrawTraficOnScreen(const std::vector<Monitor>& currentTrafficSubset) {
-    // Get the number of lines to display
-    size_t numLines = global_settings.GetConfig().GetLinesCountAsInt();
-
-    // Iterate through each line on the screen
-    for (size_t i = 0; i < numLines; ++i) {
-      ScreenEntity monitor;
-      std::vector<String> clean_str;
-      for (size_t x = 0; x < global_settings.cnt_screen_lines_per_rows; ++x) {
-        clean_str.push_back("");
-        clean_str.push_back("");
-      }
-
-      // Check if there's at least one monitor in the subset
-      if (!currentTrafficSubset.empty()) {
-        size_t monior_idx = i % currentTrafficSubset.size();
-        // dont heve cyrcular arry
-        if (i > (currentTrafficSubset.size() - 1) 
-        && currentTrafficSubset.size() > 1) {
-          break;
-        }
-
-        const Monitor& currentMonitor = currentTrafficSubset[monior_idx];
-        if (i > currentMonitor.countdown.size() - 1 
-        && currentTrafficSubset.size() == 1) {
-          // break if this cyclig getting
-          break;
-        }
-        size_t idx = currentTrafficSubset.size() == 1 ? i : coundown_idx;
-        if (currentTrafficSubset.size() == 1 
-        && idx > currentMonitor.countdown.size()) {
-          // break if this single line and countdown for this line cycle
-          break;
-        }
-        // Set the right text
-        monitor.right_txt = currentMonitor.name;
-
-        if (!currentMonitor.countdown.empty()) {
-          if (currentMonitor.countdown[idx] == 0) {
-            if ((millis() / 1000) % 2) {
-              monitor.left_txt = String("◱");
-            } else {
-              monitor.left_txt = String("◳");
-            }
-          } else {
-            monitor.left_txt = GetValidCountdown(currentMonitor.countdown, idx);
-          }
-        }
-        // Serial.println("block 2");
-        // Set lines for display
-
-        auto splitted_string = getSplittedStringFromCache(currentMonitor.towards);
-
-        for (size_t j = 0;
-             j < min(static_cast<size_t>(2), splitted_string.size()); ++j) {
-          clean_str[j] = splitted_string[j];
-        }
-
-        // if splitted string error
-        if (splitted_string.empty()) {
-          clean_str[0] = currentMonitor.towards;
-        }
-        // TODO: oprimize it
-        if (currentMonitor.description.length()) {
-          clean_str[1] = currentMonitor.description;
-        }
-      }
-      monitor.lines = clean_str;
-      // Serial.println("block 3");
-      //  Set the idx_row on the screen
-      p_screen->SetRow(monitor, i);
-// p_screen->PrintCordDebug();
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
-      for (size_t m = 0; m < monitor.lines.size(); m++) {
-        Serial.print(i);
-        Serial.print(": ");
-        Serial.println(monitor.lines[m]);
-      }
-#endif
-      // Serial.println("roww setted;");
-    }
-  }
-
-  int last_min_size = -1;  // Initialize last_min_size to an invalid value
-  std::map<String, std::vector<String>> SplittedStringCache;
-
-  /**
- * @brief Retrieves or generates a vector of split strings from a cache.
- * @param key_string The key string used to retrieve or generate split strings.
- * @return A vector of split strings either from the cache or generated.
- */
-  std::vector<String> getSplittedStringFromCache(const String& key_string) {
-    int min_size = p_screen->GetMinTextSprite_px();
-
-    if (last_min_size != min_size) {
-      // Clear the cache if min_size has changed
-      SplittedStringCache.clear();
-      last_min_size = min_size;
-    }
-
-    auto cacheIt = SplittedStringCache.find(key_string);
-    if (cacheIt != SplittedStringCache.end()) {
-      // Found in the cache, return it
-      //Serial.println("return from cache");
-      return cacheIt->second;
-    }
-
-    // Generate and cache the result
-    std::vector<String> generatedStrings = splitToString(key_string);
-    SplittedStringCache[key_string] = generatedStrings;
-    return generatedStrings;
-  }
-
-  /**
-   * @brief Splits a string into individual words and stores them in a vector.
-   * @param str The input string to be split.
-   * @param words A vector to store the individual words.
-   */
-  void splitStringToWords(const String& str, std::vector<String>& words) {
-    // SmartWatch sm(__FUNCTION__);
-    String currentWord = "";
-
-    for (size_t i = 0; i < str.length(); i++) {
-      currentWord += str.charAt(i);
-
-      // If the current character is a space or a hyphen
-      if (str.charAt(i) == ' ' || str.charAt(i) == '-') {
-        // Add the current word to the words vector
-        if (p_screen->IsEnoughSpaceForMiddleText(currentWord)) {
-          words.push_back(currentWord);
-        }
-        currentWord = "";
-      }
-    }
-
-    // Add the remaining word if it's not empty
-    if (!currentWord.isEmpty() 
-    && p_screen->IsEnoughSpaceForMiddleText(currentWord)) {
-      words.push_back(currentWord);
-    }
-  }
-
-  /**
-   * @brief Splits a string into subtexts that fit within one line.
-   * @param input The input string to be split into subtexts.
-   * @return A vector of subtexts that fit within one line.
-   */
-  std::vector<String> splitToString(const String& input) {
-    // SmartWatch sm(__FUNCTION__);
-    std::vector<String> words;
-    splitStringToWords(input, words);
-
-    // Create a list of subtexts
-    std::vector<String> subtexts;
-    String currentSubtext = "";
-
-    // Add words to the subtexts list as long as they fit in one line
-    for (size_t i = 0; i < words.size(); i++) {
-      if (p_screen->IsEnoughSpaceForMiddleText(currentSubtext + " " + words[i])){
-        currentSubtext += words[i];
-      } else {
-        if (!currentSubtext.isEmpty()) {
-          subtexts.push_back(currentSubtext);
-        }
-        currentSubtext = words[i];
-      }
-    }
-
-    if (!currentSubtext.isEmpty()) {
-      subtexts.push_back(currentSubtext);
-    }
-
-    for (size_t i = 0; i < subtexts.size(); i++) {
-      if (!subtexts[i].isEmpty() && (subtexts.size() - 1 != i)) {
-        subtexts[i] = subtexts[i].substring(0, subtexts[i].length() - 1);
-      }
-    }
-
-    return subtexts;
-  }
-
-private:
-  std::vector<Monitor> all_trafic_set;
-  int shift_cnt;
-  int coundown_idx;
-  // unsigned long previousMillisTraficSet;
-  // unsigned long previousMillisCountDown;
-  // const int INTERVAL_UPDATE = global_settings.ms_task_delay_data_update;
-  TraficClock* p_trafic_clock;
-  long prev_iterations = 0;
-};
-
-String generateRandomString(int maxLength) {
+String GetRandomString(int maxLength) {
   // Определяем допустимые символы
   String validChars =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -1805,13 +1828,14 @@ String generateRandomString(int maxLength) {
   return randomString;
 }
 
+
 /**
  * @brief Splits a string by a specified separator character.
  * @param data The input string to be split.
  * @param separator The character used for splitting.
  * @return A vector of substrings resulting from the split operation.
  */
-std::vector<String> SplitString(String data, char separator) {
+std::vector<String> GetSplittedStrings(String data, char separator) {
   int separatorIndex = 0;
   std::vector<String> result;
 
@@ -1827,18 +1851,40 @@ std::vector<String> SplitString(String data, char separator) {
   return result;
 }
 
+
+template<typename T>
+std::vector<T> cyclicSubset(const std::vector<T>& input,
+                            size_t N,
+                            size_t start) {
+  std::vector<T> result;
+  size_t size = input.size();
+
+  // Если входной вектор пустой или N равно 0, вернуть пустой результат.
+  if (input.empty() || N == 0) {
+    return result;
+  }
+
+  // Начнем с элемента start и будем добавлять элементы в результат.
+  for (size_t i = start; i < start + N; ++i) {
+    result.push_back(input[i % size]);
+  }
+
+  return result;
+}
+
+
 /**
  * @brief Filters a vector of Monitor objects based on a filter string.
  * @param data The input vector of Monitor objects.
  * @param filter The filter string to match against Monitor names.
  * @return A vector containing Monitor objects that match the filter.
  */
-std::vector<Monitor> Filter(const std::vector<Monitor>& data,
-                            const String& filter) {
+std::vector<Monitor> GetFilteredMonitors(const std::vector<Monitor>& data,
+                                         const String& filter) {
   if (filter.isEmpty()) {
     return data;
   }
-  std::vector<String> custom_names = SplitString(filter, ',');
+  std::vector<String> custom_names = GetSplittedStrings(filter, ',');
   std::vector<Monitor> result;
 
   for (auto& monitor : data) {
@@ -1850,6 +1896,26 @@ std::vector<Monitor> Filter(const std::vector<Monitor>& data,
 
   return result;
 }
+
+
+void PrintDegbugMonitors(const Monitor& monitor) {
+#if 1
+  Serial.print("Name: ");
+  Serial.print(monitor.name);
+  // Serial.print(" Towards: ");
+  // Serial.print(monitor.towards);
+  Serial.print(" Description: ");
+  Serial.print(monitor.description);
+
+  /*Serial.println("Countdown:");
+    for (int i = 0; i < monitor.countdown.size(); i++) {
+      Serial.print("  ");
+      Serial.print(monitor.countdown[i]);
+    }*/
+  Serial.println();
+#endif
+}
+
 
 /**
  * @brief Updates data for a specific task.
@@ -1864,24 +1930,24 @@ void UpdateDataTask(void* pvParameters) {
     const auto& cfg = global_settings.GetConfig();
 
     const String& rbl_id = GetJson(cfg.GetLinesRblAsString());
-    allTrafficSetInit = DeserilizeJson(rbl_id);
+    allTrafficSetInit = GetMonitorsFromJson(rbl_id);
     const String& raw_filter = cfg.GetLinesFilterAsString();
-    allTrafficSetInit = Filter(allTrafficSetInit, raw_filter);
+    allTrafficSetInit = GetFilteredMonitors(allTrafficSetInit, raw_filter);
 
     // Acquire the data mutex
     if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
       /* //DEBUG
-      for (auto& c : allTrafficSetInit) {
-        static int k = 0;
-        if (k % 2 == 0) {
-          String random = generateRandomString(25);
-          if (random.length() > 15) {
-            c.description = random;
-          }
-        }
-        k++;
-      }
-      */
+            for (auto& c : allTrafficSetInit) {
+              static int k = 0;
+              if (k % 2 == 0) {
+                String random = GetRandomString(25);
+                if (random.length() > 15) {
+                  c.description = random;
+                }
+              }
+              k++;
+            }
+            */
       if (!allTrafficSetInit.empty()) {
         pTraficManager->update(allTrafficSetInit);
 #ifdef DEBUG_SERIAL_WIEN_MONITOR
@@ -1895,6 +1961,7 @@ void UpdateDataTask(void* pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(delay_ms));
   }
 }
+
 
 /**
  * @brief Updates the screen for a specific task.
@@ -1917,13 +1984,14 @@ void ScreenUpdateTask(void* pvParameters) {
   }
 }
 
+
 /**
  * @brief Retrieves JSON data from a specified URL.
  * @param rbl_id The resource identifier to fetch data from.
  * @return The JSON data as a string or an empty string if unsuccessful.
  */
 String GetJson(const String& rbl_id) {
-  SmartWatch sm(__FUNCTION__);
+  //SmartWatch sm(__FUNCTION__);
 
   if (WiFi.status() != WL_CONNECTED) {
     return "";
@@ -1960,11 +2028,12 @@ String GetJson(const String& rbl_id) {
   return "";
 }
 
+
 /**
  * @brief Manages Wi-Fi configuration using WiFiManager.
  */
 void WiFiManagerTask() {
-  SmartWatch sm(__FUNCTION__);
+  //SmartWatch sm(__FUNCTION__);
   WiFiManager wifiManager;
   wifiManager.setDebugOutput(true);
   const char* custom_html = "<style>button{background-color:red;}</style>";
@@ -2013,6 +2082,7 @@ void WiFiManagerTask() {
     tft.print(cpp_instruction);
   }
 
+
   // Attempt to connect to Wi-Fi
   bool isConnected = wifiManager.autoConnect(cpp_ssid.c_str());
 
@@ -2037,10 +2107,11 @@ void WiFiManagerTask() {
   }
 }
 
+
 /**
  * @brief Prints system information including free heap memory.
  */
-void printSystemInfo() {
+void PrintSystemInfo() {
   // Get the free heap memory
   uint32_t freeHeap = ESP.getFreeHeap();
   Serial.print("FreeHeap:");
@@ -2049,11 +2120,12 @@ void printSystemInfo() {
   Serial.println();
 }
 
+
 /**
  * @brief Task to monitor and handle reset button presses.
  * @param pvParameters Pointer to task-specific parameters.
  */
-void ResetButtonTask(void* pvParameters) {
+void ResetActionsTask(void* pvParameters) {
   // Define the button pin
   const int buttonPin = global_settings.pin_reset_button;
 
@@ -2074,8 +2146,8 @@ void ResetButtonTask(void* pvParameters) {
     if (buttonState == LOW) {
       consecutiveLowReads++;
     } else {
-      if (consecutiveLowReads > soft_threshold 
-      && consecutiveLowReads <= hard_threshold) {
+      if (consecutiveLowReads > soft_threshold
+          && consecutiveLowReads <= hard_threshold) {
         // Perform softReset here
         Serial.println("SOFT RESETTING");
         WiFiManager wifiManager;
@@ -2103,9 +2175,10 @@ void ResetButtonTask(void* pvParameters) {
 
     int delay_ms = global_settings.ms_task_delay_resset_button;
     vTaskDelay(pdMS_TO_TICKS(delay_ms));  // Delay for 1 second
-    printSystemInfo();
+    PrintSystemInfo();
   }
 }
+
 
 /**
  * @brief Setup function for initializing the application.
@@ -2128,7 +2201,7 @@ void setup() {
   }
 
   // Create a task for reading the reset button state
-  xTaskCreate(ResetButtonTask, "ResetButtonTask", 2048 * 4, NULL, 1, NULL);
+  xTaskCreate(ResetActionsTask, "ResetActionsTask", 2048 * 4, NULL, 1, NULL);
 
   // Run WiFiManagerTask to manage WiFi connection
   WiFiManagerTask();
@@ -2151,6 +2224,7 @@ void setup() {
   xTaskCreate(UpdateDataTask, "UpdateDataTask", 2048 * 64, NULL, 2, NULL);
   xTaskCreate(ScreenUpdateTask, "ScreenUpdateTask", 2048 * 16, NULL, 1, NULL);
 }
+
 
 /**
  * @brief Main loop function (not actively used in this application).
