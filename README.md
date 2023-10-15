@@ -45,6 +45,7 @@ Once the installation is complete, follow these steps to configure your device:
   - Connect to the device's Wi-Fi network.
 
 - **Settings**:
+  - Press the button "Configure WIFI".
   - Enter your Wi-Fi SSID and password.
   - Specify your RBL, which you can find [here](https://till.mabe.at/rbl/?line=102&station=4909).
   - Optionally, select the number of lines to display.
