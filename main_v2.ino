@@ -517,7 +517,7 @@ struct GlobalSettings {
 
   ///< real count down can be faster thet real ms_task_delay_data_update
   ///< this offset time help meke more smoth transition
-  static constexpr int ms_additional_time_for_countdown = 100;
+  static constexpr int ms_additional_time_for_countdown = 200;
 
   ///< Size of font that show in first second plug in
   static constexpr int size_start_instruction_font = 4;
