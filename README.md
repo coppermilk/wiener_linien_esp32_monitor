@@ -29,13 +29,18 @@ To set up the ESP32-S3 Public Transport Departure Monitor, follow these steps:
 2. **Repository Download**:
    - Clone or download this repository to your local machine.
 
-3. **Library Installation**:
+3. **Board configuration**:
+   - In Arduino IDE, open the *Tools* menu, choose *Board*, and open the *Boards manager*
+   - Install *esp32* which includes files for the ESP32-S3 too. (Note: this downloads a few 100 MB, and installs about 2.3 GB)
+   - Open the *Tools* menu once more, choose *Board*, pick *ESP32 Arduino* and choose *LilyGo T-Display S3*
+
+4. **Library Installation**:
    - Open the Arduino IDE and install the required libraries (TFT_eSPI, ArduinoJson, HttpClient, WiFiManager).
 
-4. **Device Connection**:
+5. **Device Connection**:
    - Connect your ESP32 device to your computer.
 
-5. **Flash the Code**:
+6. **Flash the Code**:
    - Flash the code to your ESP32.
 
 ## Configuration
