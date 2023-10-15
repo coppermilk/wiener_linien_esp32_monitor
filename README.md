@@ -30,7 +30,7 @@ To set up the ESP32-S3 Public Transport Departure Monitor, follow these steps:
    - Clone or download this repository to your local machine.
 
 3. **Library Installation**:
-   - Open the Arduino IDE and install the required libraries (TFT_eSPI, ArduinoJson, HttpClient, WiFi).
+   - Open the Arduino IDE and install the required libraries (TFT_eSPI, ArduinoJson, HttpClient, WiFiManager).
 
 4. **Device Connection**:
    - Connect your ESP32 device to your computer.
