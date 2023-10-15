@@ -517,7 +517,7 @@ struct GlobalSettings {
 
   ///< real count down can be faster thet real ms_task_delay_data_update
   ///< this offset time help meke more smoth transition
-  static constexpr int ms_additional_time_for_countdown = 200;
+  static constexpr int ms_additional_time_for_countdown = 0;
 
   ///< Size of font that show in first second plug in
   static constexpr int size_start_instruction_font = 4;
@@ -569,14 +569,16 @@ public:
   SmartWatch(const char* function_name)
     : function_name(function_name), start_millis(millis()) {}
 
-  ~SmartWatch() {
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
+  unsigned long GetExecution_ms() {
     unsigned long end_millis = millis();
-    unsigned long execution_time = end_millis - start_millis;
+    return end_millis - start_millis;
+  }
+  ~SmartWatch() {
+#if 1
     Serial.print("Function '");
     Serial.print(function_name);
     Serial.print("' executed in ");
-    Serial.print(execution_time);
+    Serial.print(GetExecution_ms());
     Serial.println(" milliseconds.");
 #endif
   }
@@ -1128,7 +1130,7 @@ private:
 
     int height = maxH ? maxH + 1 : 0;
 
-   // Save the calculated value in the cache
+    // Save the calculated value in the cache
     font_height_cache[p_font] = height;
 
     return height;
@@ -1454,6 +1456,8 @@ public:
     size_t numLines = global_settings.GetConfig().GetLinesCountAsInt();
 
     // Iterate through each line on the screen
+    std::vector<ScreenEntity> vec_screen_entity;
+    // generate entity
     for (size_t i = 0; i < numLines; ++i) {
       ScreenEntity monitor;
       std::vector<String> clean_str;
@@ -1461,7 +1465,7 @@ public:
         clean_str.push_back("");
         clean_str.push_back("");
       }
-       //std::vector<String>(global_settings.cnt_screen_lines_per_rows, "");
+      //std::vector<String>(global_settings.cnt_screen_lines_per_rows, "");
 
       // Check if there's at least one monitor in the subset
       if (!currentTrafficSubset.empty()) {
@@ -1505,14 +1509,26 @@ public:
         size_t cnt_sub_rows = min(
           static_cast<size_t>(global_settings.cnt_screen_lines_per_rows),
           splitted_string.size());
+        size_t cnt_char_splitted_text = 0;
         for (size_t j = 0; j < cnt_sub_rows; ++j) {
           clean_str[j] = splitted_string[j];
+          cnt_char_splitted_text += splitted_string[j].length();
+        }
+        if (!currentMonitor.towards.isEmpty()) {
+          if ((static_cast<float>(cnt_char_splitted_text)
+                 / static_cast<float>(currentMonitor.towards.length())
+               < 0.5)) {
+            // this mean that bigger that half information lossed
+            // not enought space
+            // just get bigger word
+            // not used but if want to slool just add towards
+            String str_max = getMaximumPosibleSingleNoScrollWord(
+              currentMonitor.towards);
+            clean_str[0] = str_max;
+            clean_str[1].clear();
+          }
         }
 
-        // if splitted string error
-        if (splitted_string.empty()) {
-          clean_str[0] = currentMonitor.towards;
-        }
         // TODO: oprimize it
         if (currentMonitor.description.length()) {
           clean_str[1] = currentMonitor.description;
@@ -1521,16 +1537,15 @@ public:
       monitor.lines = clean_str;
       // Serial.println("block 3");
       //  Set the idx_row on the screen
-      p_screen->SetRow(monitor, i);
+      vec_screen_entity.push_back(monitor);
+      //p_screen->SetRow(monitor, i);
       // p_screen->PrintCordDebug();
-#ifdef DEBUG_SERIAL_WIEN_MONITOR
-      for (size_t m = 0; m < monitor.lines.size(); m++) {
-        Serial.print(i);
-        Serial.print(": ");
-        Serial.println(monitor.lines[m]);
-      }
-#endif
+
       // Serial.println("roww setted;");
+    }
+    // render entity
+    for (size_t i = 0; i < vec_screen_entity.size(); ++i) {
+      p_screen->SetRow(vec_screen_entity[i], i);
     }
   }
 
@@ -1563,6 +1578,35 @@ public:
     SplittedStringCache[key_string] = generatedStrings;
     return generatedStrings;
   }
+  /**
+ * Extracts the maximum substring from 'str' that fits the display.
+ *
+ * @param str The input string to process.
+ * @return The maximum substring that fits, or an empty string if too short.
+ */
+  String getMaximumPosibleSingleNoScrollWord(const String& str) {
+    String currentWord = "";
+    size_t strLen = str.length();
+    // Preallocate memory to prevent dynamic resizing
+    currentWord.reserve(strLen);
+
+    for (size_t i = 0; i < strLen; i++) {
+      if (p_screen->IsEnoughSpaceForMiddleText(str.substring(0, i))) {
+        currentWord += str[i];
+      } else {
+        break;
+      }
+    }
+
+    if (currentWord.length() >= 2) {
+      // Remove the last character
+      currentWord.remove(currentWord.length() - 2);
+    } else {
+      currentWord = "";  // Handle the case when the string is too short
+    }
+
+    return currentWord;
+  }
 
   /**
      * @brief Splits a string into individual words and stores them in a vector.
@@ -1572,12 +1616,12 @@ public:
   void splitStringToWords(const String& str, std::vector<String>& words) {
     // SmartWatch sm(__FUNCTION__);
     String currentWord = "";
-
+    words.reserve(32);
     for (size_t i = 0; i < str.length(); i++) {
-      currentWord += str.charAt(i);
+      currentWord += str[i];
 
       // If the current character is a space or a hyphen
-      if (str.charAt(i) == ' ' || str.charAt(i) == '-') {
+      if (str[i] == ' ' || str[i] == '-') {
         // Add the current word to the words vector
         if (p_screen->IsEnoughSpaceForMiddleText(currentWord)) {
           words.push_back(currentWord);
@@ -1678,7 +1722,7 @@ String FixJsonMistake(String word) {
     for (int i = 0; i < word.length(); i++) {
       word[i] = tolower(word[i]);  // Convert all letters to lowercase
     }
-    word[0] = toupper(word[0]); // Convert the first letter to uppercase
+    word[0] = toupper(word[0]);  // Convert the first letter to uppercase
   }
 #if DEBUG_SERIAL_WIEN_MONITOR
   Serial.println(word);
@@ -1811,14 +1855,14 @@ std::vector<Monitor> GetMonitorsFromJson(const String& json) {
 
 
 String GetRandomString(int maxLength) {
-// Define valid characters
+  // Define valid characters
   String validChars =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
   // Get a random string length from 1 to maxLength
   int length = random(1, maxLength + 1);
 
-// Generate a random string
+  // Generate a random string
   String randomString = "";
   for (int i = 0; i < length; i++) {
     int randomIndex = random(validChars.length());
@@ -1923,20 +1967,23 @@ void PrintDegbugMonitors(const Monitor& monitor) {
  */
 void UpdateDataTask(void* pvParameters) {
   std::vector<Monitor> allTrafficSetInit;
-  const int delay_ms = global_settings.ms_task_delay_data_update;
+  const int& delay_planned_ms = global_settings.ms_task_delay_data_update;
+  int delay_real_ms = 0;
 
   while (true) {
-    // Fetch JSON data (may take several seconds)
-    const auto& cfg = global_settings.GetConfig();
+    {  //SmartWatch start
+      SmartWatch sm(__FUNCTION__);
+      // Fetch JSON data (may take several seconds)
+      const auto& cfg = global_settings.GetConfig();
 
-    const String& rbl_id = GetJson(cfg.GetLinesRblAsString());
-    allTrafficSetInit = GetMonitorsFromJson(rbl_id);
-    const String& raw_filter = cfg.GetLinesFilterAsString();
-    allTrafficSetInit = GetFilteredMonitors(allTrafficSetInit, raw_filter);
+      const String& rbl_id = GetJson(cfg.GetLinesRblAsString());
+      allTrafficSetInit = GetMonitorsFromJson(rbl_id);
+      const String& raw_filter = cfg.GetLinesFilterAsString();
+      allTrafficSetInit = GetFilteredMonitors(allTrafficSetInit, raw_filter);
 
-    // Acquire the data mutex
-    if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
-      /* //DEBUG
+      // Acquire the data mutex
+      if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
+        /* //DEBUG
             for (auto& c : allTrafficSetInit) {
               static int k = 0;
               if (k % 2 == 0) {
@@ -1948,17 +1995,19 @@ void UpdateDataTask(void* pvParameters) {
               k++;
             }
             */
-      if (!allTrafficSetInit.empty()) {
-        pTraficManager->update(allTrafficSetInit);
+        if (!allTrafficSetInit.empty()) {
+          pTraficManager->update(allTrafficSetInit);
 #ifdef DEBUG_SERIAL_WIEN_MONITOR
-        Serial.println("Monitor data updated.");
+          Serial.println("Monitor data updated.");
 #endif
+        }
+        // Release the data mutex
+        xSemaphoreGive(dataMutex);
       }
-      // Release the data mutex
-      xSemaphoreGive(dataMutex);
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(delay_ms));
+      int execution_ms = static_cast<int>(sm.GetExecution_ms());
+      delay_real_ms = max(0, delay_planned_ms - execution_ms);
+    }  //SmartWatch end
+    vTaskDelay(pdMS_TO_TICKS(delay_real_ms));
   }
 }
 
