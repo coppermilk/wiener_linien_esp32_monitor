@@ -876,7 +876,7 @@ private:
     TFT_eSprite sprite(&tft);
     TFT_eSprite bg_left_sprite(&tft);
     TFT_eSprite bg_right_sprite(&tft);
-    // TFT_eSprite bg_sprite(&tft);  // Отдельный спрайт для квадратов
+    // TFT_eSprite bg_sprite(&tft);  // Separate sprite for squares
 
     // Set background colors based on DEBUG mode
     uint16_t color_left, color_middle, color_right;
@@ -1128,7 +1128,7 @@ private:
 
     int height = maxH ? maxH + 1 : 0;
 
-    // Сохраняем рассчитанное значение в кэше
+   // Save the calculated value in the cache
     font_height_cache[p_font] = height;
 
     return height;
@@ -1667,7 +1667,7 @@ void PrintDebugMonitor(const Monitor& t) {
 
 String FixJsonMistake(String word) {
   word = Screen::ConvertGermanToLatin(word);
-  // Проверяем, содержит ли входная строка пробелы
+  // Check if the input string contains spaces
 #if DEBUG_SERIAL_WIEN_MONITOR
   Serial.println(word);
 #endif
@@ -1676,9 +1676,9 @@ String FixJsonMistake(String word) {
       && word.indexOf(' ') == -1
       && word.length() > 1) {
     for (int i = 0; i < word.length(); i++) {
-      word[i] = tolower(word[i]);  // Преобразуем все буквы в нижний регистр
+      word[i] = tolower(word[i]);  // Convert all letters to lowercase
     }
-    word[0] = toupper(word[0]);  // Преобразуем первую букву в верхний регистр
+    word[0] = toupper(word[0]); // Convert the first letter to uppercase
   }
 #if DEBUG_SERIAL_WIEN_MONITOR
   Serial.println(word);
@@ -1794,9 +1794,9 @@ std::vector<Monitor> GetMonitorsFromJson(const String& json) {
 
           if (it == monitors_vec.end()) {
             monitors_vec.push_back(
-              cur_monitor);  // Если не найден, добавляем новый Monitor
+              cur_monitor);  // If not found, add a new Monitor
           } else {
-            // Если найден, обновляем существующий Monitor счетчиком countdown
+            // If found, update the existing Monitor with the countdown counter
             if (countdown != -1) {
               it->countdown.push_back(countdown);
             }
@@ -1811,14 +1811,14 @@ std::vector<Monitor> GetMonitorsFromJson(const String& json) {
 
 
 String GetRandomString(int maxLength) {
-  // Определяем допустимые символы
+// Define valid characters
   String validChars =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-  // Получаем случайную длину строки от 1 до maxLength
+  // Get a random string length from 1 to maxLength
   int length = random(1, maxLength + 1);
 
-  // Генерируем случайную строку
+// Generate a random string
   String randomString = "";
   for (int i = 0; i < length; i++) {
     int randomIndex = random(validChars.length());
@@ -1859,12 +1859,12 @@ std::vector<T> cyclicSubset(const std::vector<T>& input,
   std::vector<T> result;
   size_t size = input.size();
 
-  // Если входной вектор пустой или N равно 0, вернуть пустой результат.
+  // If the input vector is empty or N is 0, return an empty result.
   if (input.empty() || N == 0) {
     return result;
   }
 
-  // Начнем с элемента start и будем добавлять элементы в результат.
+  // Let's start with the start element and add elements to the result.
   for (size_t i = start; i < start + N; ++i) {
     result.push_back(input[i % size]);
   }
