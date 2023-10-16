@@ -18,9 +18,6 @@ jobs:
       - name: Install required libraries
         run: |
           arduino-cli lib install "ArduinoJson"
-          arduino-cli lib install "esp_task_wdt"
-          arduino-cli lib install "FS"
-          arduino-cli lib install "HTTPClient"
           arduino-cli lib install "TFT_eSPI"
           arduino-cli lib install "WiFiManager"
         shell: bash
@@ -33,9 +30,6 @@ jobs:
               source-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
           libraries: |
             - name: ArduinoJson
-            - name: esp_task_wdt
-            - name: FS
-            - name: HTTPClient
             - name: TFT_eSPI
             - name: WiFiManager
           sketch-name: |
