@@ -12,7 +12,7 @@ jobs:
 
       - uses: arduino/compile-sketches@v1
         with:
-          fqbn: "esp32:esp32:tinypico"
+          fqbn: "esp32:esp32:esp32s3"
           platforms: |
             - name: esp32:esp32:esp32s3
               source-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
