@@ -1,3 +1,4 @@
+[![Build Arduino Sketch](https://github.com/coppermilk/wiener_linien_esp32_monitor/actions/workflows/main.yml/badge.svg)](https://github.com/coppermilk/wiener_linien_esp32_monitor/actions/workflows/main.yml)
 # Wiener Linien ESP32-S3 Public Transport Departure Monitor
 
 **Brief description:** The ESP32-S3 Public Transport Departure Monitor project is a small device based on the ESP32-S3 platform. It allows you to track public transport departures in real time and receive a countdown to the next departures. The project is based on the use of open data from the City of Vienna provided by Wiener Linien. (Data source: City of Vienna - https://data.wien.gv.at)
