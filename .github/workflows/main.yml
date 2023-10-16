@@ -12,11 +12,24 @@ jobs:
 
       - uses: arduino/compile-sketches@v1
         with:
-          fqbn: "esp32:esp32:esp32s3"
+          fqbn: "esp32:esp32:tinypico"
           platforms: |
-            - name: esp32:esp32:esp32s3
+            - name: esp32:esp32
               source-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
           libraries: |
             - name: Servo
+                - name: ArduinoJson
+                - name: esp_task_wdt
+                - name: freertos
+                - name: FS
+                - name: HTTPClient
+                - name: limits
+                - name: map
+                - name: SPIFFS
+                - name: SPI
+                - name: TFT_eSPI
+                - name: unordered_map
+                - name: vector
+                - name: WiFiManage
           sketch-name: |
             - main_v2.ino
