@@ -32,5 +32,3 @@ jobs:
             - name: ArduinoJson
             - name: TFT_eSPI
             - name: WiFiManager
-          sketch-name: |
-            - main_v2.ino
