@@ -22,13 +22,7 @@ jobs:
           arduino-cli lib install "WiFiManager"
         shell: bash
 
-      - uses: arduino/compile-sketches@v1
-        with:
-          fqbn: "esp32:esp32:tinypico"
-          platforms: |
-            - name: esp32:esp32
-              source-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
-          libraries: |
-            - name: ArduinoJson
-            - name: TFT_eSPI
-            - name: WiFiManager
+      - name: Compile Arduino sketch
+        run: |
+          arduino-cli compile --fqbn esp32:esp32:tinypico /github/workspace/main_v2.ino
+        shell: bash
