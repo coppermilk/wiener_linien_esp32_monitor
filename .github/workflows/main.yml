@@ -24,6 +24,6 @@ jobs:
 
       - name: Compile Arduino sketch
         run: |
-            arduino-cli compile --fqbn esp32:esp32:tinypico /github/workspace/sketch/
+            arduino-cli compile --fqbn esp32:esp32:tinypico /github/workspace/sketch/main.ino
         shell: bash
 
