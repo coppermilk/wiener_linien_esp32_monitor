@@ -10,6 +10,21 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v2
 
+      - name: Install Arduino CLI
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=~/.local/bin sh
+        shell: bash
+
+      - name: Install required libraries
+        run: |
+          arduino-cli lib install "ArduinoJson"
+          arduino-cli lib install "esp_task_wdt"
+          arduino-cli lib install "FS"
+          arduino-cli lib install "HTTPClient"
+          arduino-cli lib install "TFT_eSPI"
+          arduino-cli lib install "WiFiManager"
+        shell: bash
+
       - uses: arduino/compile-sketches@v1
         with:
           fqbn: "esp32:esp32:tinypico"
@@ -17,19 +32,11 @@ jobs:
             - name: esp32:esp32
               source-url: https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_dev_index.json
           libraries: |
-            - name: Servo
-                - name: ArduinoJson
-                - name: esp_task_wdt
-                - name: freertos
-                - name: FS
-                - name: HTTPClient
-                - name: limits
-                - name: map
-                - name: SPIFFS
-                - name: SPI
-                - name: TFT_eSPI
-                - name: unordered_map
-                - name: vector
-                - name: WiFiManage
+            - name: ArduinoJson
+            - name: esp_task_wdt
+            - name: FS
+            - name: HTTPClient
+            - name: TFT_eSPI
+            - name: WiFiManager
           sketch-name: |
             - main_v2.ino
