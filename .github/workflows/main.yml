@@ -9,7 +9,7 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
-
+        
       - name: Install Arduino CLI
         run: |
           curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
@@ -21,9 +21,13 @@ jobs:
           arduino-cli lib install "TFT_eSPI"
           arduino-cli lib install "WiFiManager"
         shell: bash
+        
+      - uses: arduino/compile-sketches@v1
+        with:
+          fqbn: "esp32:esp32:tinypico"
+          platforms: |
+            - name: esp32:esp32
+              source-url: https://dl.espressif.com/dl/package_esp32_index.json
 
-      - name: Compile Arduino sketch
-        run: |
-            arduino-cli compile --fqbn esp32:esp32:tinypico /github/workspace/sketch/main.ino
-        shell: bash
-
+          sketch-paths: |
+            - sketch
