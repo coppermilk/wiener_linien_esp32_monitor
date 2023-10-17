@@ -76,7 +76,7 @@ private:
     "<i>Optional.</i>"
     "Filter the lines to show by comma-separating the directions."
     "If empty, all directions will be shown.<br>"
-    "Example: \"D,2,UZ2\".<br><br>"
+    "Example: \"D,2,U2Z\".<br><br>"
     "<b>Filter lines:</b>";
 
 public:
