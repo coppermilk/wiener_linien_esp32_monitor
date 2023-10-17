@@ -128,7 +128,7 @@ public:
   static String GetLineCountPrompt(int min, int max, int def) {
     String range = GetFormatRange(min, max);
     String result =
-      "How many lines do you want to show at the same time on monitor "
+      "How many shown depatures do you want to show at the same time on monitor "
       + range + "? (Default: "
       + String(def) + "). <br>"
                       "Example: \""
