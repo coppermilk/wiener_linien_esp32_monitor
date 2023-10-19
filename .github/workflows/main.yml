@@ -9,11 +9,15 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v2
-        
-      - name: Install Arduino CLI
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
-        shell: bash
+
+      # We use the `arduino/setup-arduino-cli` action to install and
+      # configure the Arduino CLI on the system.
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v1
+     # - name: Install Arduino CLI
+     #   run: |
+     #     curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+     #   shell: bash
 
       - name: Install required libraries
         run: |
