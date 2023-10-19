@@ -258,3 +258,4 @@ void screenInit() {
   // Use a single function call to draw the line
   tft.drawFastHLine(0, y_coordinate_middle, tft.width(), TFT_BLACK);
 }
+
