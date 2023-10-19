@@ -12,7 +12,10 @@ jobs:
         
       - name: Install Arduino CLI
         run: |
-          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
+          ARCH=64bit
+          OS=Linux
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh -s -- -b /usr/local/bin
+          arduino-cli version
         shell: bash
 
       - name: Install required libraries
