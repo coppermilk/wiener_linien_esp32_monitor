@@ -2085,8 +2085,8 @@ void WiFiManagerTask() {
   //SmartWatch sm(__FUNCTION__);
   WiFiManager wifiManager;
   wifiManager.setDebugOutput(true);
-  const char* custom_html = "<style>button{background-color:red;}</style>";
-  wifiManager.setCustomHeadElement(custom_html);
+  //const char* custom_html = "<style>button{background-color:red;}</style>";
+  //wifiManager.setCustomHeadElement(custom_html);
 
   // Load saved configuration
   const Config& old_config = global_settings.GetConfig();
