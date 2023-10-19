@@ -10,16 +10,9 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v2
         
-      - name: Download Arduino CLI
-        run: |
-          curl -fsSL https://downloads.arduino.cc/arduino-cli/arduino-cli_Linux_64bit.tar.gz -o arduino-cli.tar.gz
-          tar -xzf arduino-cli.tar.gz
-        shell: bash
-
       - name: Install Arduino CLI
         run: |
-          sudo mv arduino-cli /usr/local/bin
-          arduino-cli version
+          curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
         shell: bash
 
       - name: Install required libraries
