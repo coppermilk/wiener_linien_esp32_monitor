@@ -82,4 +82,4 @@ With the ESP32-S3 Public Transport Departure Monitor, we aim to make your daily 
 
 ![Vienna Liner Monitor](img/monitor.jpeg)
 
-![Line notification](img/notification.gif)
+![Line notification](img/notification2.gif)
