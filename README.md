@@ -5,8 +5,6 @@
 
 https://github.com/coppermilk/wiener_linien_esp32_monitor/assets/25866713/15eaa64c-565c-4828-9e0d-c0c5b81a090a
 
-![Line notification](img/notification.gif)
-
 ## Project components:
 - 1x LILYGO T-Display-S3 ESP32-S3 1.9-inch board. Without pins! [[AliExpress]](https://de.aliexpress.com/item/1005004756588137.html?af=208&cv=0&cn=42s1eefrilp8reljxqmxkbskcmmy336v&dp=v5_42s1eefrilp8reljxqmxkbskcmmy336v&af=208&cv=0&cn=42s1eefrilp8reljxqmxkbskcmmy336v&dp=v5_42s1eefrilp8reljxqmxkbskcmmy336v&utm_source=epn&utm_medium=cpa&utm_campaign=208&utm_content=0&product_id=1005004756588137&afref=https%3A%2F%2Fbackit.me&aff_fcid=c8c377a14da845c7838fa62c18307494-1695404439822-03623-_9G57Xi&aff_fsk=_9G57Xi&aff_platform=portals-hotproduct&sk=_9G57Xi&aff_trace_key=c8c377a14da845c7838fa62c18307494-1695404439822-03623-_9G57Xi&terminal_id=4559c76026b7443083747fca08307839&afSmartRedirect=y)
 - 1x USB cable with magnetic connector. (Little cut borders.) [[AliExpress]](https://de.aliexpress.com/item/4001058884201.html?af=208&cv=0&cn=42s1eeqlg1t78izxx05nefdc9mbc0xmk&dp=v5_42s1eeqlg1t78izxx05nefdc9mbc0xmk&af=208&cv=0&cn=42s1eeqlg1t78izxx05nefdc9mbc0xmk&dp=v5_42s1eeqlg1t78izxx05nefdc9mbc0xmk&utm_source=epn&utm_medium=cpa&utm_campaign=208&utm_content=0&product_id=4001058884201&afref=https%3A%2F%2Fbackit.me&aff_fcid=e96e9205401748eb9aa8edd56caa1a1b-1695404829888-03654-_9G57Xi&aff_fsk=_9G57Xi&aff_platform=portals-hotproduct&sk=_9G57Xi&aff_trace_key=e96e9205401748eb9aa8edd56caa1a1b-1695404829888-03654-_9G57Xi&terminal_id=4559c76026b7443083747fca08307839&afSmartRedirect=y)
@@ -83,3 +81,5 @@ In case you need to reset your device, we offer two options:
 With the ESP32-S3 Public Transport Departure Monitor, we aim to make your daily commute more predictable and efficient, reducing the time spent waiting for public transport. Stay up-to-date with real-time departure information and plan your journeys with confidence.
 
 ![Vienna Liner Monitor](img/monitor.jpeg)
+
+![Line notification](img/notification.gif)
