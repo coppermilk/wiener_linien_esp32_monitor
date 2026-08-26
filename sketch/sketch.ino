@@ -17,7 +17,9 @@
 
 //#define DEBUG_SERIAL_WIEN_MONITOR 0
 #define TFT_BG tft.color565(0, 5, 0)
-#define TFT_TEXT tft.color565(255, 240, 93)
+// TFT_TEXT is user-configurable (web settings page); g_text_color is set
+// from Config in setup(), defaulting to the original amber (255, 240, 93).
+#define TFT_TEXT g_text_color
 #define URL_BASE \
   "https://www.wienerlinien.at/ogd_realtime/monitor?" \
   "activateTrafficInfo=stoerunglang&rbl="
@@ -52,6 +54,7 @@ void WiFiManagerTask();
 String BuildSettingsPage();
 void StartSettingsServer();
 void WebServerTask(void*);
+uint16_t HexToColor565(const String&);
 
 // Global variables
 SemaphoreHandle_t dataMutex;
@@ -59,6 +62,7 @@ TFT_eSPI tft = TFT_eSPI();
 WebServer settingsServer(80);
 Screen* p_screen = nullptr;
 TraficManager* pTraficManager = nullptr;
+uint16_t g_text_color;
 
 
 /**
@@ -188,7 +192,8 @@ struct Config {
      * Sets the number of lines to the default of cnt_default_lines.
      */
   explicit Config()
-    : cnt_lines(cnt_default_lines) {}
+    : cnt_lines(cnt_default_lines),
+      text_color(default_text_color) {}
 
   /**
      * @brief Copy constructor.
@@ -200,7 +205,8 @@ struct Config {
   Config(const Config& other)
     : cnt_lines(other.cnt_lines),
       lines_filter(other.lines_filter),
-      lines_rbl(other.lines_rbl) {}
+      lines_rbl(other.lines_rbl),
+      text_color(other.text_color) {}
   /**
      * @brief Assignment operator.
      *
@@ -214,6 +220,7 @@ struct Config {
       lines_filter = other.lines_filter;
       lines_rbl = other.lines_rbl;
       cnt_lines = other.cnt_lines;
+      text_color = other.text_color;
     }
     return *this;
   }
@@ -229,7 +236,8 @@ struct Config {
   bool operator==(const Config& other) const {
     return lines_filter == other.lines_filter
            && lines_rbl == other.lines_rbl
-           && cnt_lines == other.cnt_lines;
+           && cnt_lines == other.cnt_lines
+           && text_color == other.text_color;
   }
   /**
      * @brief Inequality operator.
@@ -335,6 +343,29 @@ struct Config {
     return lines_rbl.toInt();
   }
 
+  /**
+     * @brief Sets the display text color.
+     *
+     * @param str The color as a "#RRGGBB" hex string (as produced by an
+     * HTML color picker input).
+     */
+  void SetTextColor(const String& str) {
+    if (str.length() == 7 && str.charAt(0) == '#') {
+      text_color = str;
+    }
+  }
+  /**
+     * @brief Gets the display text color as a "#RRGGBB" hex string.
+     *
+     * @return The display text color.
+     */
+  const String& GetTextColorAsString() const {
+    return text_color;
+  }
+
+  ///< Default display text color (amber), used when no config is set yet.
+  static constexpr const char* default_text_color = "#FFF05D";
+
 private:
   /**
      * @brief Verifies that the lines count input is valid.
@@ -365,6 +396,9 @@ private:
 
   ///< The lines RBL.
   String lines_rbl;
+
+  ///< The display text color as a "#RRGGBB" hex string.
+  String text_color;
 };
 
 /**
@@ -387,6 +421,7 @@ struct ConfigFileHandler {
     json["lines_filter"] = cfg.GetLinesFilterAsString();
     json["rbl_id"] = cfg.GetLinesRblAsString();
     json["lines_count"] = cfg.GetLinesCountAsString();
+    json["text_color"] = cfg.GetTextColorAsString();
 
     File file_config = SPIFFS.open(JSON_CONFIG_FILE, "w");
     if (!file_config) {
@@ -441,6 +476,9 @@ struct ConfigFileHandler {
             cfg.SetLinesFilter(json["lines_filter"].as<String>());
             cfg.SetLinesRBL(json["rbl_id"].as<String>());
             cfg.SetLinesCount(json["lines_count"].as<String>());
+            // "| default" falls back gracefully for configs saved before
+            // this field existed.
+            cfg.SetTextColor(json["text_color"] | Config::default_text_color);
             Serial.println("\nparsed json end");
             return true;
           } else {
@@ -2164,6 +2202,21 @@ void WiFiManagerTask() {
 
 
 /**
+ * @brief Converts a "#RRGGBB" hex color string to a TFT_eSPI 565 color.
+ *        Falls back to the original amber default on any malformed input.
+ */
+uint16_t HexToColor565(const String& hex) {
+  String h = hex;
+  if (h.startsWith("#")) h.remove(0, 1);
+  if (h.length() != 6) h = "FFF05D";
+  long value = strtol(h.c_str(), nullptr, 16);
+  uint8_t r = (value >> 16) & 0xFF;
+  uint8_t g = (value >> 8) & 0xFF;
+  uint8_t b = value & 0xFF;
+  return tft.color565(r, g, b);
+}
+
+/**
  * @brief Builds the HTML for the always-on LAN settings page.
  */
 String BuildSettingsPage() {
@@ -2184,6 +2237,9 @@ String BuildSettingsPage() {
     "<label>Filter (optional, z.B. D,2,U2Z)</label><br>"
     "<input name='filter' value='" + cfg.GetLinesFilterAsString()
     + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Anzeigefarbe</label><br>"
+    "<input type='color' name='text_color' value='" + cfg.GetTextColorAsString()
+    + "' style='width:100%;height:40px;padding:2px;margin:4px 0 12px;box-sizing:border-box;'><br>"
     "<button type='submit' style='padding:10px 20px;'>Speichern &amp; Neustarten</button>"
     "</form></body></html>";
   return html;
@@ -2211,6 +2267,7 @@ void StartSettingsServer() {
     new_config.SetLinesRBL(settingsServer.arg("rbl"));
     new_config.SetLinesCount(settingsServer.arg("count"));
     new_config.SetLinesFilter(settingsServer.arg("filter"));
+    new_config.SetTextColor(settingsServer.arg("text_color"));
     global_settings.SetConfig(new_config);
     settingsServer.send(200, "text/html",
       "<html><head><meta charset='utf-8'></head>"
@@ -2325,6 +2382,9 @@ void setup() {
     delay(global_settings.ms_error_resset_delay);
     ESP.restart();  // Restart the ESP32
   }
+
+  // Load the configured display color (falls back to amber if unset)
+  g_text_color = HexToColor565(global_settings.GetConfig().GetTextColorAsString());
 
   // Create a task for reading the reset button state
   xTaskCreate(ResetActionsTask, "ResetActionsTask", 2048 * 4, NULL, 1, NULL);
