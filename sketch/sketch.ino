@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <vector>
 #include <WiFiManager.h>  // by tzapu 2.0.16
+#include <WebServer.h>    // bundled with esp32:esp32 core
+#include <ESPmDNS.h>      // bundled with esp32:esp32 core
 
 //#define DEBUG_SERIAL_WIEN_MONITOR 0
 #define TFT_BG tft.color565(0, 5, 0)
@@ -47,10 +49,14 @@ void ResetActionsTask(void*);
 void ScreenUpdateTask(void*);
 void UpdateDataTask(void*);
 void WiFiManagerTask();
+String BuildSettingsPage();
+void StartSettingsServer();
+void WebServerTask(void*);
 
 // Global variables
 SemaphoreHandle_t dataMutex;
 TFT_eSPI tft = TFT_eSPI();
+WebServer settingsServer(80);
 Screen* p_screen = nullptr;
 TraficManager* pTraficManager = nullptr;
 
@@ -2158,6 +2164,77 @@ void WiFiManagerTask() {
 
 
 /**
+ * @brief Builds the HTML for the always-on LAN settings page.
+ */
+String BuildSettingsPage() {
+  const Config& cfg = global_settings.GetConfig();
+  String html =
+    "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+    "<title>Wiener Linien Monitor</title></head>"
+    "<body style='font-family:sans-serif;max-width:420px;margin:2em auto;padding:0 1em;'>"
+    "<h2>Wiener Linien Monitor</h2>"
+    "<form method='POST' action='/save'>"
+    "<label>RBL / Stop ID (<a href='https://till.mabe.at/rbl/' target='_blank'>Suche</a>)</label><br>"
+    "<input name='rbl' value='" + cfg.GetLinesRblAsString()
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Zeilenanzahl (1-3)</label><br>"
+    "<input name='count' value='" + cfg.GetLinesCountAsString()
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Filter (optional, z.B. D,2,U2Z)</label><br>"
+    "<input name='filter' value='" + cfg.GetLinesFilterAsString()
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<button type='submit' style='padding:10px 20px;'>Speichern &amp; Neustarten</button>"
+    "</form></body></html>";
+  return html;
+}
+
+/**
+ * @brief Starts the mDNS responder and the always-on LAN settings web server.
+ *        Called once after WiFiManagerTask() has confirmed a WiFi connection,
+ *        so it never competes with WiFiManager's own captive-portal server.
+ */
+void StartSettingsServer() {
+  if (MDNS.begin("wienerlinien")) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("Settings: http://wienerlinien.local/");
+  }
+  Serial.print("Settings: http://");
+  Serial.println(WiFi.localIP());
+
+  settingsServer.on("/", HTTP_GET, []() {
+    settingsServer.send(200, "text/html", BuildSettingsPage());
+  });
+
+  settingsServer.on("/save", HTTP_POST, []() {
+    Config new_config;
+    new_config.SetLinesRBL(settingsServer.arg("rbl"));
+    new_config.SetLinesCount(settingsServer.arg("count"));
+    new_config.SetLinesFilter(settingsServer.arg("filter"));
+    global_settings.SetConfig(new_config);
+    settingsServer.send(200, "text/html",
+      "<html><head><meta charset='utf-8'></head>"
+      "<body style='font-family:sans-serif;text-align:center;margin-top:3em;'>"
+      "<h3>Gespeichert. Ger&auml;t startet neu&hellip;</h3></body></html>");
+    delay(800);
+    ESP.restart();
+  });
+
+  settingsServer.begin();
+}
+
+/**
+ * @brief Handles incoming requests for the LAN settings web server.
+ */
+void WebServerTask(void* pvParameters) {
+  while (1) {
+    settingsServer.handleClient();
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+
+
+/**
  * @brief Prints system information including free heap memory.
  */
 void PrintSystemInfo() {
@@ -2265,6 +2342,11 @@ void setup() {
     delay(global_settings.ms_error_resset_delay);
     ESP.restart();  // Restart the ESP32
   }
+
+  // Start the always-on LAN settings server (http://wienerlinien.local/)
+  // so RBL/count/filter can be changed without re-entering WiFi credentials.
+  StartSettingsServer();
+  xTaskCreate(WebServerTask, "WebServerTask", 2048 * 8, NULL, 1, NULL);
 
   // Create a mutex for synchronization
   dataMutex = xSemaphoreCreateMutex();
