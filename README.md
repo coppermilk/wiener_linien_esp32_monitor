@@ -60,6 +60,27 @@ Once the installation is complete, follow these steps to configure your device:
   - Optionally, define your filter criteria.
   - Press the save button to save your settings.
 
+## Build & Flash (arduino-cli)
+
+```sh
+# core (must be < 3.0, see issue #2)
+arduino-cli core install esp32:esp32@2.0.14
+
+# libraries (pinned)
+arduino-cli lib install "ArduinoJson@6.21.3" "TFT_eSPI@2.5.0" "WiFiManager@2.0.16-rc.2"
+
+# TFT_eSPI setup: in <sketchbook>/libraries/TFT_eSPI/User_Setup_Select.h
+#   comment out:  #include <User_Setup.h>
+#   uncomment:    #include <User_Setups/Setup206_LilyGo_T_Display_S3.h>
+
+FQBN="esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,PartitionScheme=default,FlashMode=dio,FlashSize=16M,PSRAM=opi"
+arduino-cli compile --fqbn "$FQBN" sketch/
+arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn "$FQBN" sketch/
+```
+
+Note: uses the generic `esp32:esp32:esp32s3` board, not `lilygo_t_display_s3` — that
+profile has no SPIFFS partition scheme, which the config file needs.
+
 ## Resetting
 ![Reset Button](img/resset_button.png)
 In case you need to reset your device, we offer two options:

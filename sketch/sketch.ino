@@ -2182,6 +2182,9 @@ void WiFiManagerTask() {
   new_config.SetLinesFilter(filterParam.getValue());
   new_config.SetLinesRBL(rblParam.getValue());
   new_config.SetLinesCount(countParam.getValue());
+  // This form doesn't manage the display color (that's only on the LAN
+  // settings page), so always carry the existing value over unchanged.
+  new_config.SetTextColor(old_config.GetTextColorAsString());
 
   Serial.println(new_config.GetLinesFilterAsString());
   Serial.println(new_config.GetLinesRblAsString());
@@ -2204,6 +2207,12 @@ void WiFiManagerTask() {
 /**
  * @brief Converts a "#RRGGBB" hex color string to a TFT_eSPI 565 color.
  *        Falls back to the original amber default on any malformed input.
+ *
+ *        Red and blue are swapped here: this panel's sprite-drawn text
+ *        (Setup206, TFT_RGB_ORDER=TFT_BGR) renders color565(r,g,b) with
+ *        red and blue channels reversed, confirmed experimentally (a
+ *        requested blue rendered as orange). Swapping on the way in makes
+ *        what the user picks match what is actually displayed.
  */
 uint16_t HexToColor565(const String& hex) {
   String h = hex;
@@ -2213,7 +2222,7 @@ uint16_t HexToColor565(const String& hex) {
   uint8_t r = (value >> 16) & 0xFF;
   uint8_t g = (value >> 8) & 0xFF;
   uint8_t b = value & 0xFF;
-  return tft.color565(r, g, b);
+  return tft.color565(b, g, r);
 }
 
 /**
