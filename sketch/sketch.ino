@@ -2376,6 +2376,12 @@ void ResetActionsTask(void* pvParameters) {
  * @brief Setup function for initializing the application.
  */
 void setup() {
+  // Enable the board's peripheral power rail (LCD etc.). Needed when
+  // running off the 5V pin / battery without USB, which doesn't power
+  // this rail the way a USB connection does.
+  pinMode(15, OUTPUT);
+  digitalWrite(15, HIGH);
+
   // Initialize Serial communication
   Serial.begin(115200);
   Serial.println("APP START");
