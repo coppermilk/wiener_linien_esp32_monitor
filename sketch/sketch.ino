@@ -52,8 +52,10 @@ void ScreenUpdateTask(void*);
 void UpdateDataTask(void*);
 void WiFiManagerTask();
 String BuildSettingsPage();
+String GetHostname();
 void StartSettingsServer();
 void WebServerTask(void*);
+void ShowStartupInfoScreen();
 uint16_t HexToColor565(const String&);
 
 // Global variables
@@ -206,7 +208,8 @@ struct Config {
     : cnt_lines(other.cnt_lines),
       lines_filter(other.lines_filter),
       lines_rbl(other.lines_rbl),
-      text_color(other.text_color) {}
+      text_color(other.text_color),
+      hostname(other.hostname) {}
   /**
      * @brief Assignment operator.
      *
@@ -221,6 +224,7 @@ struct Config {
       lines_rbl = other.lines_rbl;
       cnt_lines = other.cnt_lines;
       text_color = other.text_color;
+      hostname = other.hostname;
     }
     return *this;
   }
@@ -237,7 +241,8 @@ struct Config {
     return lines_filter == other.lines_filter
            && lines_rbl == other.lines_rbl
            && cnt_lines == other.cnt_lines
-           && text_color == other.text_color;
+           && text_color == other.text_color
+           && hostname == other.hostname;
   }
   /**
      * @brief Inequality operator.
@@ -363,6 +368,22 @@ struct Config {
     return text_color;
   }
 
+  /**
+     * @brief Sets the device hostname (mDNS name). Lowercases and keeps only
+     *        [a-z0-9-], max 32 chars. Empty means "use the MAC-based default".
+     */
+  void SetHostname(const String& str) {
+    String h;
+    for (size_t i = 0; i < str.length() && h.length() < 32; i++) {
+      char c = tolower(str[i]);
+      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') h += c;
+    }
+    hostname = h;
+  }
+  const String& GetHostnameRaw() const {
+    return hostname;
+  }
+
   ///< Default display text color (amber), used when no config is set yet.
   static constexpr const char* default_text_color = "#FFF05D";
 
@@ -399,6 +420,7 @@ private:
 
   ///< The display text color as a "#RRGGBB" hex string.
   String text_color;
+  String hostname;
 };
 
 /**
@@ -422,6 +444,7 @@ struct ConfigFileHandler {
     json["rbl_id"] = cfg.GetLinesRblAsString();
     json["lines_count"] = cfg.GetLinesCountAsString();
     json["text_color"] = cfg.GetTextColorAsString();
+    json["hostname"] = cfg.GetHostnameRaw();
 
     File file_config = SPIFFS.open(JSON_CONFIG_FILE, "w");
     if (!file_config) {
@@ -479,6 +502,7 @@ struct ConfigFileHandler {
             // "| default" falls back gracefully for configs saved before
             // this field existed.
             cfg.SetTextColor(json["text_color"] | Config::default_text_color);
+            cfg.SetHostname(json["hostname"] | "");
             Serial.println("\nparsed json end");
             return true;
           } else {
@@ -2129,6 +2153,10 @@ void WiFiManagerTask() {
   //SmartWatch sm(__FUNCTION__);
   WiFiManager wifiManager;
   wifiManager.setDebugOutput(true);
+  // If the saved WLAN is unreachable the config portal opens; give up after
+  // 3 min without a client so the device retries the saved WLAN (e.g. after a
+  // router reboot or power outage) instead of waiting in AP mode forever.
+  wifiManager.setConfigPortalTimeout(180);
   //const char* custom_html = "<style>button{background-color:red;}</style>";
   //wifiManager.setCustomHeadElement(custom_html);
 
@@ -2185,6 +2213,7 @@ void WiFiManagerTask() {
   // This form doesn't manage the display color (that's only on the LAN
   // settings page), so always carry the existing value over unchanged.
   new_config.SetTextColor(old_config.GetTextColorAsString());
+  new_config.SetHostname(old_config.GetHostnameRaw());
 
   Serial.println(new_config.GetLinesFilterAsString());
   Serial.println(new_config.GetLinesRblAsString());
@@ -2226,6 +2255,36 @@ uint16_t HexToColor565(const String& hex) {
 }
 
 /**
+ * @brief Returns the configured hostname, or "wienerlinien-<last 2 MAC
+ *        bytes>" so several stations on one network never collide.
+ */
+String GetHostname() {
+  const String& h = global_settings.GetConfig().GetHostnameRaw();
+  if (h.length() > 0) return h;
+  uint64_t mac = ESP.getEfuseMac();
+  char buf[32];
+  snprintf(buf, sizeof(buf), "wienerlinien-%02x%02x", (uint8_t)(mac >> 8), (uint8_t)mac);
+  return String(buf);
+}
+
+/**
+ * @brief Escapes a string for use inside a single-quoted HTML attribute.
+ */
+String HtmlEscape(const String& in) {
+  String out;
+  for (size_t i = 0; i < in.length(); i++) {
+    char c = in[i];
+    if (c == '&') out += "&amp;";
+    else if (c == '<') out += "&lt;";
+    else if (c == '>') out += "&gt;";
+    else if (c == '\'') out += "&#39;";
+    else if (c == '"') out += "&quot;";
+    else out += c;
+  }
+  return out;
+}
+
+/**
  * @brief Builds the HTML for the always-on LAN settings page.
  */
 String BuildSettingsPage() {
@@ -2238,18 +2297,32 @@ String BuildSettingsPage() {
     "<h2>Wiener Linien Monitor</h2>"
     "<form method='POST' action='/save'>"
     "<label>RBL / Stop ID (<a href='https://till.mabe.at/rbl/' target='_blank'>Suche</a>)</label><br>"
-    "<input name='rbl' value='" + cfg.GetLinesRblAsString()
+    "<input name='rbl' value='" + HtmlEscape(cfg.GetLinesRblAsString())
     + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
     "<label>Zeilenanzahl (1-3)</label><br>"
     "<input name='count' value='" + cfg.GetLinesCountAsString()
     + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
     "<label>Filter (optional, z.B. D,2,U2Z)</label><br>"
-    "<input name='filter' value='" + cfg.GetLinesFilterAsString()
+    "<input name='filter' value='" + HtmlEscape(cfg.GetLinesFilterAsString())
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Ger&auml;tename (z.B. karlsplatz) &ndash; erreichbar als <i>name</i>.local</label><br>"
+    "<input name='hostname' value='" + HtmlEscape(GetHostname())
     + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
     "<label>Anzeigefarbe</label><br>"
     "<input type='color' name='text_color' value='" + cfg.GetTextColorAsString()
     + "' style='width:100%;height:40px;padding:2px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<h3>WLAN</h3>"
+    "<label>WLAN-Name (SSID)</label><br>"
+    "<input name='ssid' value='" + HtmlEscape(WiFi.SSID())
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>WLAN-Passwort (leer lassen = unver&auml;ndert)</label><br>"
+    "<input type='password' name='pass' autocomplete='new-password'"
+    " style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
     "<button type='submit' style='padding:10px 20px;'>Speichern &amp; Neustarten</button>"
+    "</form>"
+    "<form method='POST' action='/wifi_reset' style='margin-top:2em;'"
+    " onsubmit=\"return confirm('WLAN-Daten l\u00f6schen? Das Ger\u00e4t \u00f6ffnet danach wieder sein eigenes WLAN.');\">"
+    "<button type='submit' style='padding:10px 20px;'>WLAN zur&uuml;cksetzen (Access-Point-Modus)</button>"
     "</form></body></html>";
   return html;
 }
@@ -2260,9 +2333,10 @@ String BuildSettingsPage() {
  *        so it never competes with WiFiManager's own captive-portal server.
  */
 void StartSettingsServer() {
-  if (MDNS.begin("wienerlinien")) {
+  String host = GetHostname();
+  if (MDNS.begin(host.c_str())) {
     MDNS.addService("http", "tcp", 80);
-    Serial.println("Settings: http://wienerlinien.local/");
+    Serial.println("Settings: http://" + host + ".local/");
   }
   Serial.print("Settings: http://");
   Serial.println(WiFi.localIP());
@@ -2277,7 +2351,20 @@ void StartSettingsServer() {
     new_config.SetLinesCount(settingsServer.arg("count"));
     new_config.SetLinesFilter(settingsServer.arg("filter"));
     new_config.SetTextColor(settingsServer.arg("text_color"));
+    new_config.SetHostname(settingsServer.arg("hostname"));
     global_settings.SetConfig(new_config);
+
+    // Change WLAN only if the SSID differs or a new password was entered.
+    // The credentials are persisted by the ESP32 WiFi stack; if they turn out
+    // to be wrong the device falls back to the access-point portal on reboot.
+    String ssid = settingsServer.arg("ssid");
+    String pass = settingsServer.arg("pass");
+    bool wifi_changed = ssid.length() > 0 && (ssid != WiFi.SSID() || pass.length() > 0);
+    if (wifi_changed) {
+      WiFi.persistent(true);
+      WiFi.begin(ssid.c_str(), pass.length() > 0 ? pass.c_str() : WiFi.psk().c_str());
+    }
+
     settingsServer.send(200, "text/html",
       "<html><head><meta charset='utf-8'></head>"
       "<body style='font-family:sans-serif;text-align:center;margin-top:3em;'>"
@@ -2286,7 +2373,52 @@ void StartSettingsServer() {
     ESP.restart();
   });
 
+  settingsServer.on("/wifi_reset", HTTP_POST, []() {
+    settingsServer.send(200, "text/html",
+      "<html><head><meta charset='utf-8'></head>"
+      "<body style='font-family:sans-serif;text-align:center;margin-top:3em;'>"
+      "<h3>WLAN gel&ouml;scht. Ger&auml;t startet im Access-Point-Modus neu&hellip;</h3></body></html>");
+    delay(800);
+    WiFiManager wifiManager;
+    wifiManager.resetSettings();
+    ESP.restart();
+  });
+
   settingsServer.begin();
+}
+
+/**
+ * @brief Shows the settings address and a 10 s countdown before the monitor
+ *        starts. If no RBL is configured yet it stays here until the user
+ *        saves a configuration (which restarts the device).
+ */
+void ShowStartupInfoScreen() {
+  const int FONT_BIG = 4;
+  const int FONT_SMALL = 2;
+  const int COUNTDOWN_S = 10;
+  String ip = WiFi.localIP().toString();
+  bool has_config = global_settings.GetConfig().GetLinesRblAsString().length() > 0;
+
+  tft.fillScreen(TFT_BG);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_TEXT, TFT_BG);
+  tft.setTextPadding(tft.width());
+  tft.drawString(has_config ? "Einstellungen:" : "Noch keine Config!", 0, 0, FONT_BIG);
+  tft.drawString(GetHostname() + ".local", 0, 34, FONT_BIG);
+  tft.drawString("IP: " + ip, 0, 68, FONT_SMALL);
+
+  if (!has_config) {
+    tft.drawString("Bitte oben aufrufen und", 0, 110, FONT_SMALL);
+    tft.drawString("RBL eintragen.", 0, 130, FONT_SMALL);
+    while (1) vTaskDelay(pdMS_TO_TICKS(1000));  // settings task handles requests
+  }
+
+  for (int i = COUNTDOWN_S; i > 0; i--) {
+    tft.drawString("Start in " + String(i) + " s", 0, 120, FONT_BIG);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+  tft.setTextPadding(0);
+  tft.fillScreen(TFT_BG);
 }
 
 /**
@@ -2407,10 +2539,6 @@ void setup() {
   // Run WiFiManagerTask to manage WiFi connection
   WiFiManagerTask();
 
-  pTraficManager = new TraficManager;
-  p_screen = new Screen(global_settings.GetConfig().GetLinesCountAsInt(),
-                        global_settings.cnt_screen_lines_per_rows);
-
   // Check if WiFi is successfully connected
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Failed to connect to WiFi!");
@@ -2419,9 +2547,16 @@ void setup() {
   }
 
   // Start the always-on LAN settings server (http://wienerlinien.local/)
-  // so RBL/count/filter can be changed without re-entering WiFi credentials.
+  // so RBL/count/filter/WLAN can be changed at any time without opening the case.
   StartSettingsServer();
   xTaskCreate(WebServerTask, "WebServerTask", 2048 * 8, NULL, 1, NULL);
+
+  // Show the settings address for 10 s (or indefinitely if not configured yet)
+  ShowStartupInfoScreen();
+
+  pTraficManager = new TraficManager;
+  p_screen = new Screen(global_settings.GetConfig().GetLinesCountAsInt(),
+                        global_settings.cnt_screen_lines_per_rows);
 
   // Create a mutex for synchronization
   dataMutex = xSemaphoreCreateMutex();

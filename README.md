@@ -60,6 +60,15 @@ Once the installation is complete, follow these steps to configure your device:
   - Optionally, define your filter criteria.
   - Press the save button to save your settings.
 
+## Changing settings later (no need to open the case)
+After every boot the display shows the device's address (`<hostname>.local`, plus the IP as fallback) for 10 seconds before switching to the departure view.
+
+- **Open `http://<hostname>.local/`** from any device on the same Wi-Fi to change RBL, line count, filter, display color, device name and Wi-Fi credentials. Saving restarts the device.
+- **Several stations:** every device gets a unique default name `wienerlinien-xxxx` (last 4 hex digits of its MAC). Give each one a meaningful name (e.g. `karlsplatz`) in the "Gerätename" field.
+- **No Wi-Fi / wrong Wi-Fi:** the device opens its own access point "Wien Transport" with the setup portal. If nobody connects within 3 minutes it retries the saved Wi-Fi (e.g. after a router reboot).
+- **Wi-Fi saved but no config yet:** the display stays on the address screen ("Noch keine Config!") until an RBL is saved via the settings page.
+- **Change Wi-Fi remotely:** enter the new SSID/password on the settings page, or use "WLAN zurücksetzen" to put the device back into access-point mode.
+
 ## Build & Flash (arduino-cli)
 
 ```sh
