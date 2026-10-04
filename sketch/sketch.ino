@@ -12,10 +12,14 @@
 #include <unordered_map>
 #include <vector>
 #include <WiFiManager.h>  // by tzapu 2.0.16
+#include <WebServer.h>    // bundled with esp32:esp32 core
+#include <ESPmDNS.h>      // bundled with esp32:esp32 core
 
 //#define DEBUG_SERIAL_WIEN_MONITOR 0
 #define TFT_BG tft.color565(0, 5, 0)
-#define TFT_TEXT tft.color565(255, 240, 93)
+// TFT_TEXT is user-configurable (web settings page); g_text_color is set
+// from Config in setup(), defaulting to the original amber (255, 240, 93).
+#define TFT_TEXT g_text_color
 #define URL_BASE \
   "https://www.wienerlinien.at/ogd_realtime/monitor?" \
   "activateTrafficInfo=stoerunglang&rbl="
@@ -47,12 +51,20 @@ void ResetActionsTask(void*);
 void ScreenUpdateTask(void*);
 void UpdateDataTask(void*);
 void WiFiManagerTask();
+String BuildSettingsPage();
+String GetHostname();
+void StartSettingsServer();
+void WebServerTask(void*);
+void ShowStartupInfoScreen();
+uint16_t HexToColor565(const String&);
 
 // Global variables
 SemaphoreHandle_t dataMutex;
 TFT_eSPI tft = TFT_eSPI();
+WebServer settingsServer(80);
 Screen* p_screen = nullptr;
 TraficManager* pTraficManager = nullptr;
+uint16_t g_text_color;
 
 
 /**
@@ -182,7 +194,8 @@ struct Config {
      * Sets the number of lines to the default of cnt_default_lines.
      */
   explicit Config()
-    : cnt_lines(cnt_default_lines) {}
+    : cnt_lines(cnt_default_lines),
+      text_color(default_text_color) {}
 
   /**
      * @brief Copy constructor.
@@ -194,7 +207,9 @@ struct Config {
   Config(const Config& other)
     : cnt_lines(other.cnt_lines),
       lines_filter(other.lines_filter),
-      lines_rbl(other.lines_rbl) {}
+      lines_rbl(other.lines_rbl),
+      text_color(other.text_color),
+      hostname(other.hostname) {}
   /**
      * @brief Assignment operator.
      *
@@ -208,6 +223,8 @@ struct Config {
       lines_filter = other.lines_filter;
       lines_rbl = other.lines_rbl;
       cnt_lines = other.cnt_lines;
+      text_color = other.text_color;
+      hostname = other.hostname;
     }
     return *this;
   }
@@ -223,7 +240,9 @@ struct Config {
   bool operator==(const Config& other) const {
     return lines_filter == other.lines_filter
            && lines_rbl == other.lines_rbl
-           && cnt_lines == other.cnt_lines;
+           && cnt_lines == other.cnt_lines
+           && text_color == other.text_color
+           && hostname == other.hostname;
   }
   /**
      * @brief Inequality operator.
@@ -329,6 +348,45 @@ struct Config {
     return lines_rbl.toInt();
   }
 
+  /**
+     * @brief Sets the display text color.
+     *
+     * @param str The color as a "#RRGGBB" hex string (as produced by an
+     * HTML color picker input).
+     */
+  void SetTextColor(const String& str) {
+    if (str.length() == 7 && str.charAt(0) == '#') {
+      text_color = str;
+    }
+  }
+  /**
+     * @brief Gets the display text color as a "#RRGGBB" hex string.
+     *
+     * @return The display text color.
+     */
+  const String& GetTextColorAsString() const {
+    return text_color;
+  }
+
+  /**
+     * @brief Sets the device hostname (mDNS name). Lowercases and keeps only
+     *        [a-z0-9-], max 32 chars. Empty means "use the MAC-based default".
+     */
+  void SetHostname(const String& str) {
+    String h;
+    for (size_t i = 0; i < str.length() && h.length() < 32; i++) {
+      char c = tolower(str[i]);
+      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-') h += c;
+    }
+    hostname = h;
+  }
+  const String& GetHostnameRaw() const {
+    return hostname;
+  }
+
+  ///< Default display text color (amber), used when no config is set yet.
+  static constexpr const char* default_text_color = "#FFF05D";
+
 private:
   /**
      * @brief Verifies that the lines count input is valid.
@@ -359,6 +417,10 @@ private:
 
   ///< The lines RBL.
   String lines_rbl;
+
+  ///< The display text color as a "#RRGGBB" hex string.
+  String text_color;
+  String hostname;
 };
 
 /**
@@ -381,6 +443,8 @@ struct ConfigFileHandler {
     json["lines_filter"] = cfg.GetLinesFilterAsString();
     json["rbl_id"] = cfg.GetLinesRblAsString();
     json["lines_count"] = cfg.GetLinesCountAsString();
+    json["text_color"] = cfg.GetTextColorAsString();
+    json["hostname"] = cfg.GetHostnameRaw();
 
     File file_config = SPIFFS.open(JSON_CONFIG_FILE, "w");
     if (!file_config) {
@@ -435,6 +499,10 @@ struct ConfigFileHandler {
             cfg.SetLinesFilter(json["lines_filter"].as<String>());
             cfg.SetLinesRBL(json["rbl_id"].as<String>());
             cfg.SetLinesCount(json["lines_count"].as<String>());
+            // "| default" falls back gracefully for configs saved before
+            // this field existed.
+            cfg.SetTextColor(json["text_color"] | Config::default_text_color);
+            cfg.SetHostname(json["hostname"] | "");
             Serial.println("\nparsed json end");
             return true;
           } else {
@@ -2085,6 +2153,10 @@ void WiFiManagerTask() {
   //SmartWatch sm(__FUNCTION__);
   WiFiManager wifiManager;
   wifiManager.setDebugOutput(true);
+  // If the saved WLAN is unreachable the config portal opens; give up after
+  // 3 min without a client so the device retries the saved WLAN (e.g. after a
+  // router reboot or power outage) instead of waiting in AP mode forever.
+  wifiManager.setConfigPortalTimeout(180);
   //const char* custom_html = "<style>button{background-color:red;}</style>";
   //wifiManager.setCustomHeadElement(custom_html);
 
@@ -2138,6 +2210,10 @@ void WiFiManagerTask() {
   new_config.SetLinesFilter(filterParam.getValue());
   new_config.SetLinesRBL(rblParam.getValue());
   new_config.SetLinesCount(countParam.getValue());
+  // This form doesn't manage the display color (that's only on the LAN
+  // settings page), so always carry the existing value over unchanged.
+  new_config.SetTextColor(old_config.GetTextColorAsString());
+  new_config.SetHostname(old_config.GetHostnameRaw());
 
   Serial.println(new_config.GetLinesFilterAsString());
   Serial.println(new_config.GetLinesRblAsString());
@@ -2153,6 +2229,205 @@ void WiFiManagerTask() {
       global_settings.SetConfig(new_config);
     }
     Serial.println("Saved!");
+  }
+}
+
+
+/**
+ * @brief Converts a "#RRGGBB" hex color string to a TFT_eSPI 565 color.
+ *        Falls back to the original amber default on any malformed input.
+ *
+ *        Red and blue are swapped here: this panel's sprite-drawn text
+ *        (Setup206, TFT_RGB_ORDER=TFT_BGR) renders color565(r,g,b) with
+ *        red and blue channels reversed, confirmed experimentally (a
+ *        requested blue rendered as orange). Swapping on the way in makes
+ *        what the user picks match what is actually displayed.
+ */
+uint16_t HexToColor565(const String& hex) {
+  String h = hex;
+  if (h.startsWith("#")) h.remove(0, 1);
+  if (h.length() != 6) h = "FFF05D";
+  long value = strtol(h.c_str(), nullptr, 16);
+  uint8_t r = (value >> 16) & 0xFF;
+  uint8_t g = (value >> 8) & 0xFF;
+  uint8_t b = value & 0xFF;
+  return tft.color565(b, g, r);
+}
+
+/**
+ * @brief Returns the configured hostname, or "wienerlinien-<last 2 MAC
+ *        bytes>" so several stations on one network never collide.
+ */
+String GetHostname() {
+  const String& h = global_settings.GetConfig().GetHostnameRaw();
+  if (h.length() > 0) return h;
+  uint64_t mac = ESP.getEfuseMac();
+  char buf[32];
+  snprintf(buf, sizeof(buf), "wienerlinien-%02x%02x", (uint8_t)(mac >> 8), (uint8_t)mac);
+  return String(buf);
+}
+
+/**
+ * @brief Escapes a string for use inside a single-quoted HTML attribute.
+ */
+String HtmlEscape(const String& in) {
+  String out;
+  for (size_t i = 0; i < in.length(); i++) {
+    char c = in[i];
+    if (c == '&') out += "&amp;";
+    else if (c == '<') out += "&lt;";
+    else if (c == '>') out += "&gt;";
+    else if (c == '\'') out += "&#39;";
+    else if (c == '"') out += "&quot;";
+    else out += c;
+  }
+  return out;
+}
+
+/**
+ * @brief Builds the HTML for the always-on LAN settings page.
+ */
+String BuildSettingsPage() {
+  const Config& cfg = global_settings.GetConfig();
+  String html =
+    "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+    "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+    "<title>Wiener Linien Monitor</title></head>"
+    "<body style='font-family:sans-serif;max-width:420px;margin:2em auto;padding:0 1em;'>"
+    "<h2>Wiener Linien Monitor</h2>"
+    "<form method='POST' action='/save'>"
+    "<label>RBL / Stop ID (<a href='https://till.mabe.at/rbl/' target='_blank'>Suche</a>)</label><br>"
+    "<input name='rbl' value='" + HtmlEscape(cfg.GetLinesRblAsString())
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Zeilenanzahl (1-3)</label><br>"
+    "<input name='count' value='" + cfg.GetLinesCountAsString()
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Filter (optional, z.B. D,2,U2Z)</label><br>"
+    "<input name='filter' value='" + HtmlEscape(cfg.GetLinesFilterAsString())
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Ger&auml;tename (z.B. karlsplatz) &ndash; erreichbar als <i>name</i>.local</label><br>"
+    "<input name='hostname' value='" + HtmlEscape(GetHostname())
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>Anzeigefarbe</label><br>"
+    "<input type='color' name='text_color' value='" + cfg.GetTextColorAsString()
+    + "' style='width:100%;height:40px;padding:2px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<h3>WLAN</h3>"
+    "<label>WLAN-Name (SSID)</label><br>"
+    "<input name='ssid' value='" + HtmlEscape(WiFi.SSID())
+    + "' style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<label>WLAN-Passwort (leer lassen = unver&auml;ndert)</label><br>"
+    "<input type='password' name='pass' autocomplete='new-password'"
+    " style='width:100%;padding:6px;margin:4px 0 12px;box-sizing:border-box;'><br>"
+    "<button type='submit' style='padding:10px 20px;'>Speichern &amp; Neustarten</button>"
+    "</form>"
+    "<form method='POST' action='/wifi_reset' style='margin-top:2em;'"
+    " onsubmit=\"return confirm('WLAN-Daten l\u00f6schen? Das Ger\u00e4t \u00f6ffnet danach wieder sein eigenes WLAN.');\">"
+    "<button type='submit' style='padding:10px 20px;'>WLAN zur&uuml;cksetzen (Access-Point-Modus)</button>"
+    "</form></body></html>";
+  return html;
+}
+
+/**
+ * @brief Starts the mDNS responder and the always-on LAN settings web server.
+ *        Called once after WiFiManagerTask() has confirmed a WiFi connection,
+ *        so it never competes with WiFiManager's own captive-portal server.
+ */
+void StartSettingsServer() {
+  String host = GetHostname();
+  if (MDNS.begin(host.c_str())) {
+    MDNS.addService("http", "tcp", 80);
+    Serial.println("Settings: http://" + host + ".local/");
+  }
+  Serial.print("Settings: http://");
+  Serial.println(WiFi.localIP());
+
+  settingsServer.on("/", HTTP_GET, []() {
+    settingsServer.send(200, "text/html", BuildSettingsPage());
+  });
+
+  settingsServer.on("/save", HTTP_POST, []() {
+    Config new_config;
+    new_config.SetLinesRBL(settingsServer.arg("rbl"));
+    new_config.SetLinesCount(settingsServer.arg("count"));
+    new_config.SetLinesFilter(settingsServer.arg("filter"));
+    new_config.SetTextColor(settingsServer.arg("text_color"));
+    new_config.SetHostname(settingsServer.arg("hostname"));
+    global_settings.SetConfig(new_config);
+
+    // Change WLAN only if the SSID differs or a new password was entered.
+    // The credentials are persisted by the ESP32 WiFi stack; if they turn out
+    // to be wrong the device falls back to the access-point portal on reboot.
+    String ssid = settingsServer.arg("ssid");
+    String pass = settingsServer.arg("pass");
+    bool wifi_changed = ssid.length() > 0 && (ssid != WiFi.SSID() || pass.length() > 0);
+    if (wifi_changed) {
+      WiFi.persistent(true);
+      WiFi.begin(ssid.c_str(), pass.length() > 0 ? pass.c_str() : WiFi.psk().c_str());
+    }
+
+    settingsServer.send(200, "text/html",
+      "<html><head><meta charset='utf-8'></head>"
+      "<body style='font-family:sans-serif;text-align:center;margin-top:3em;'>"
+      "<h3>Gespeichert. Ger&auml;t startet neu&hellip;</h3></body></html>");
+    delay(800);
+    ESP.restart();
+  });
+
+  settingsServer.on("/wifi_reset", HTTP_POST, []() {
+    settingsServer.send(200, "text/html",
+      "<html><head><meta charset='utf-8'></head>"
+      "<body style='font-family:sans-serif;text-align:center;margin-top:3em;'>"
+      "<h3>WLAN gel&ouml;scht. Ger&auml;t startet im Access-Point-Modus neu&hellip;</h3></body></html>");
+    delay(800);
+    WiFiManager wifiManager;
+    wifiManager.resetSettings();
+    ESP.restart();
+  });
+
+  settingsServer.begin();
+}
+
+/**
+ * @brief Shows the settings address and a 10 s countdown before the monitor
+ *        starts. If no RBL is configured yet it stays here until the user
+ *        saves a configuration (which restarts the device).
+ */
+void ShowStartupInfoScreen() {
+  const int FONT_BIG = 4;
+  const int FONT_SMALL = 2;
+  const int COUNTDOWN_S = 10;
+  String ip = WiFi.localIP().toString();
+  bool has_config = global_settings.GetConfig().GetLinesRblAsString().length() > 0;
+
+  tft.fillScreen(TFT_BG);
+  tft.setTextSize(1);
+  tft.setTextColor(TFT_TEXT, TFT_BG);
+  tft.setTextPadding(tft.width());
+  tft.drawString(has_config ? "Einstellungen:" : "Noch keine Config!", 0, 0, FONT_BIG);
+  tft.drawString(GetHostname() + ".local", 0, 34, FONT_BIG);
+  tft.drawString("IP: " + ip, 0, 68, FONT_SMALL);
+
+  if (!has_config) {
+    tft.drawString("Bitte oben aufrufen und", 0, 110, FONT_SMALL);
+    tft.drawString("RBL eintragen.", 0, 130, FONT_SMALL);
+    while (1) vTaskDelay(pdMS_TO_TICKS(1000));  // settings task handles requests
+  }
+
+  for (int i = COUNTDOWN_S; i > 0; i--) {
+    tft.drawString("Start in " + String(i) + " s", 0, 120, FONT_BIG);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+  }
+  tft.setTextPadding(0);
+  tft.fillScreen(TFT_BG);
+}
+
+/**
+ * @brief Handles incoming requests for the LAN settings web server.
+ */
+void WebServerTask(void* pvParameters) {
+  while (1) {
+    settingsServer.handleClient();
+    vTaskDelay(pdMS_TO_TICKS(20));
   }
 }
 
@@ -2233,6 +2508,12 @@ void ResetActionsTask(void* pvParameters) {
  * @brief Setup function for initializing the application.
  */
 void setup() {
+  // Enable the board's peripheral power rail (LCD etc.). Needed when
+  // running off the 5V pin / battery without USB, which doesn't power
+  // this rail the way a USB connection does.
+  pinMode(15, OUTPUT);
+  digitalWrite(15, HIGH);
+
   // Initialize Serial communication
   Serial.begin(115200);
   Serial.println("APP START");
@@ -2249,15 +2530,14 @@ void setup() {
     ESP.restart();  // Restart the ESP32
   }
 
+  // Load the configured display color (falls back to amber if unset)
+  g_text_color = HexToColor565(global_settings.GetConfig().GetTextColorAsString());
+
   // Create a task for reading the reset button state
   xTaskCreate(ResetActionsTask, "ResetActionsTask", 2048 * 4, NULL, 1, NULL);
 
   // Run WiFiManagerTask to manage WiFi connection
   WiFiManagerTask();
-
-  pTraficManager = new TraficManager;
-  p_screen = new Screen(global_settings.GetConfig().GetLinesCountAsInt(),
-                        global_settings.cnt_screen_lines_per_rows);
 
   // Check if WiFi is successfully connected
   if (WiFi.status() != WL_CONNECTED) {
@@ -2265,6 +2545,18 @@ void setup() {
     delay(global_settings.ms_error_resset_delay);
     ESP.restart();  // Restart the ESP32
   }
+
+  // Start the always-on LAN settings server (http://wienerlinien.local/)
+  // so RBL/count/filter/WLAN can be changed at any time without opening the case.
+  StartSettingsServer();
+  xTaskCreate(WebServerTask, "WebServerTask", 2048 * 8, NULL, 1, NULL);
+
+  // Show the settings address for 10 s (or indefinitely if not configured yet)
+  ShowStartupInfoScreen();
+
+  pTraficManager = new TraficManager;
+  p_screen = new Screen(global_settings.GetConfig().GetLinesCountAsInt(),
+                        global_settings.cnt_screen_lines_per_rows);
 
   // Create a mutex for synchronization
   dataMutex = xSemaphoreCreateMutex();

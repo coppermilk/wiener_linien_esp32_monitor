@@ -60,6 +60,36 @@ Once the installation is complete, follow these steps to configure your device:
   - Optionally, define your filter criteria.
   - Press the save button to save your settings.
 
+## Changing settings later (no need to open the case)
+After every boot the display shows the device's address (`<hostname>.local`, plus the IP as fallback) for 10 seconds before switching to the departure view.
+
+- **Open `http://<hostname>.local/`** from any device on the same Wi-Fi to change RBL, line count, filter, display color, device name and Wi-Fi credentials. Saving restarts the device.
+- **Several stations:** every device gets a unique default name `wienerlinien-xxxx` (last 4 hex digits of its MAC). Give each one a meaningful name (e.g. `karlsplatz`) in the "Gerätename" field.
+- **No Wi-Fi / wrong Wi-Fi:** the device opens its own access point "Wien Transport" with the setup portal. If nobody connects within 3 minutes it retries the saved Wi-Fi (e.g. after a router reboot).
+- **Wi-Fi saved but no config yet:** the display stays on the address screen ("Noch keine Config!") until an RBL is saved via the settings page.
+- **Change Wi-Fi remotely:** enter the new SSID/password on the settings page, or use "WLAN zurücksetzen" to put the device back into access-point mode.
+
+## Build & Flash (arduino-cli)
+
+```sh
+# core (must be < 3.0, see issue #2)
+arduino-cli core install esp32:esp32@2.0.14
+
+# libraries (pinned)
+arduino-cli lib install "ArduinoJson@6.21.3" "TFT_eSPI@2.5.0" "WiFiManager@2.0.16-rc.2"
+
+# TFT_eSPI setup: in <sketchbook>/libraries/TFT_eSPI/User_Setup_Select.h
+#   comment out:  #include <User_Setup.h>
+#   uncomment:    #include <User_Setups/Setup206_LilyGo_T_Display_S3.h>
+
+FQBN="esp32:esp32:esp32s3:USBMode=hwcdc,CDCOnBoot=cdc,PartitionScheme=default,FlashMode=dio,FlashSize=16M,PSRAM=opi"
+arduino-cli compile --fqbn "$FQBN" sketch/
+arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn "$FQBN" sketch/
+```
+
+Note: uses the generic `esp32:esp32:esp32s3` board, not `lilygo_t_display_s3` — that
+profile has no SPIFFS partition scheme, which the config file needs.
+
 ## Resetting
 ![Reset Button](img/resset_button.png)
 In case you need to reset your device, we offer two options:
